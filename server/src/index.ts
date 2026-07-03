@@ -1,0 +1,40 @@
+import cors from "cors";
+import "dotenv/config";
+import express from "express";
+import { authRoutes } from "./routes/authRoutes.js";
+import { callRoutes } from "./routes/callRoutes.js";
+import { logRoutes } from "./routes/logRoutes.js";
+import { roleRoutes } from "./routes/roleRoutes.js";
+import { userRoutes } from "./routes/userRoutes.js";
+
+const app = express();
+const port = Number(process.env.PORT) || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.use("/auth", authRoutes);
+app.use(callRoutes);
+app.use(roleRoutes);
+app.use(userRoutes);
+app.use(logRoutes);
+
+app.use(
+  (
+    error: unknown,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    console.error(error);
+    res.status(500).json({ message: "Beklenmeyen bir hata oluştu." });
+  },
+);
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});

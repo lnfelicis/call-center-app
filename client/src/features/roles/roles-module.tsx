@@ -13,6 +13,13 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { Permission, Role, RoleForm } from "@/types"
 
 type RolesModuleProps = {
@@ -47,7 +54,7 @@ export function RolesModule({
   const roleCanBeCreated = roleForm.name.trim().length >= 2 && roleForm.permissions.length > 0
 
   return (
-    <div className="module-grid">
+    <div className="grid items-start gap-4 xl:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Yeni rol oluştur</CardTitle>
@@ -56,17 +63,17 @@ export function RolesModule({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="stack" onSubmit={onCreateRole}>
-            <div className="field">
+          <form className="grid gap-4" onSubmit={onCreateRole}>
+            <div className="grid gap-2">
               <Label htmlFor="role-name">Rol adı</Label>
               <Input
                 id="role-name"
-                placeholder="Örn. Personel Manager"
+                placeholder="Örn. Personal Manager"
                 value={roleForm.name}
                 onChange={(event) => onRoleFormChange({ ...roleForm, name: event.target.value })}
               />
             </div>
-            <div className="field">
+            <div className="grid gap-2">
               <Label htmlFor="role-description">Açıklama</Label>
               <Input
                 id="role-description"
@@ -77,7 +84,9 @@ export function RolesModule({
                 }
               />
             </div>
-            <p className="form-hint">Rol oluşturmak için en az bir izin seçilmelidir.</p>
+            <p className="text-sm text-muted-foreground">
+              Rol oluşturmak için en az bir izin seçilmelidir.
+            </p>
             <PermissionChecklist
               permissionsByGroup={permissionsByGroup}
               selectedPermissions={roleForm.permissions}
@@ -99,28 +108,30 @@ export function RolesModule({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="stack">
-            <div className="field">
+          <div className="grid gap-4">
+            <div className="grid gap-2">
               <Label htmlFor="selected-role">Rol</Label>
-              <select
-                id="selected-role"
-                className="select-control"
-                value={selectedRoleId}
-                onChange={(event) => onSelectRole(event.target.value)}
-              >
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={selectedRoleId} onValueChange={onSelectRole}>
+                <SelectTrigger id="selected-role" className="w-full">
+                  <SelectValue placeholder="Rol seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {selectedRole && (
               <>
-                <div className="role-summary">
-                  <div>
-                    <strong>{selectedRole.name}</strong>
-                    <span>{selectedRole.description ?? "Açıklama eklenmemiş"}</span>
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-medium">{selectedRole.name}</strong>
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {selectedRole.description ?? "Açıklama eklenmemiş"}
+                    </span>
                   </div>
                   <Badge variant={selectedRole.isActive ? "default" : "outline"}>
                     {selectedRole.isActive ? "Aktif" : "Pasif"}

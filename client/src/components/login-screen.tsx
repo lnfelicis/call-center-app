@@ -1,4 +1,4 @@
-import type { FormEvent } from "react"
+import type { FormEvent, ReactNode } from "react"
 import { KeyRound, LayoutDashboard, ShieldCheck } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -32,22 +32,23 @@ export function LoginScreen({
   onSubmit,
 }: LoginScreenProps) {
   return (
-    <main className="login-shell">
-      <section className="login-visual">
+    <main className="grid min-h-svh items-center gap-8 bg-background p-5 md:grid-cols-[minmax(0,1fr)_420px] md:p-12">
+      <section className="max-w-3xl">
         <Badge variant="outline">Yönetim Paneli</Badge>
-        <h1>Çağrı kayıt sistemi</h1>
-        <p>
-          Rol bazlı yetkilendirme, kullanıcı yönetimi ve sonraki fazlarda çağrı
-          operasyonları için genişleyebilir yönetim yüzeyi.
+        <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-none tracking-normal md:text-6xl">
+          Çağrı kayıt sistemi
+        </h1>
+        <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
+          Rol bazlı yetkilendirme, kullanıcı yönetimi ve çağrı operasyonları için genişleyebilir yönetim yüzeyi.
         </p>
-        <div className="login-highlights">
-          <span><ShieldCheck /> Rol bazlı erişim</span>
-          <span><KeyRound /> Güvenli oturum</span>
-          <span><LayoutDashboard /> Modüler panel</span>
+        <div className="mt-8 flex flex-wrap gap-2">
+          <Highlight icon={<ShieldCheck />} label="Rol bazlı erişim" />
+          <Highlight icon={<KeyRound />} label="Güvenli oturum" />
+          <Highlight icon={<LayoutDashboard />} label="Modüler panel" />
         </div>
       </section>
 
-      <Card className="login-card">
+      <Card>
         <CardHeader>
           <CardTitle>Sisteme giriş</CardTitle>
           <CardDescription>
@@ -55,8 +56,8 @@ export function LoginScreen({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="stack" onSubmit={onSubmit}>
-            <div className="field">
+          <form className="grid gap-4" onSubmit={onSubmit}>
+            <div className="grid gap-2">
               <Label htmlFor="username">Kullanıcı adı veya e-posta</Label>
               <Input
                 id="username"
@@ -64,7 +65,7 @@ export function LoginScreen({
                 onChange={(event) => onChange({ ...form, username: event.target.value })}
               />
             </div>
-            <div className="field">
+            <div className="grid gap-2">
               <Label htmlFor="password">Şifre</Label>
               <Input
                 id="password"
@@ -73,7 +74,7 @@ export function LoginScreen({
                 onChange={(event) => onChange({ ...form, password: event.target.value })}
               />
             </div>
-            {message && <p className="form-message">{message}</p>}
+            {message && <p className="text-sm text-muted-foreground">{message}</p>}
             <Button type="submit" size="lg" disabled={isLoading}>
               <KeyRound />
               Giriş yap
@@ -82,5 +83,14 @@ export function LoginScreen({
         </CardContent>
       </Card>
     </main>
+  )
+}
+
+function Highlight({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <span className="inline-flex min-h-9 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
+      <span className="[&_svg]:size-4">{icon}</span>
+      {label}
+    </span>
   )
 }

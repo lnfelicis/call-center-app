@@ -1,0 +1,336 @@
+import { useCallback, useEffect, useMemo, useState } from "react"
+import type { FormEvent } from "react"
+
+import { isPasswordValid } from "@/lib/password"
+import type {
+  AuthUser,
+  ManagedUser,
+  ModuleId,
+  Permission,
+  RequestFn,
+  Role,
+  RoleForm,
+  UserForm,
+} from "@/types"
+
+const apiBaseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000"
+
+const emptyRoleForm: RoleForm = {
+  name: "",
+  description: "",
+  permissions: [],
+}
+
+const emptyUserForm: UserForm = {
+  username: "",
+  fullName: "",
+  email: "",
+  password: "",
+  roleId: "",
+}
+
+export function useAdminPanel() {
+  const [token, setToken] = useState(() => localStorage.getItem("call-center-token") ?? "")
+  const [activeModule, setActiveModule] = useState<ModuleId>("dashboard")
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [permissions, setPermissions] = useState<Permission[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
+  const [users, setUsers] = useState<ManagedUser[]>([])
+  const [selectedRoleId, setSelectedRoleId] = useState("")
+  const [loginForm, setLoginForm] = useState({ username: "superadmin", password: "Admin12345!" })
+  const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm)
+  const [userForm, setUserForm] = useState<UserForm>(emptyUserForm)
+  const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState("")
+
+  const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? roles[0]
+  const permissionsByGroup = useMemo(() => {
+    return permissions.reduce<Record<string, Permission[]>>((groups, permission) => {
+      groups[permission.groupName] = [...(groups[permission.groupName] ?? []), permission]
+      return groups
+    }, {})
+  }, [permissions])
+
+  const request: RequestFn = useCallback(
+    async <T,>(path: string, options: RequestInit = {}) => {
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...options.headers,
+        },
+      })
+
+      const data = (await response.json().catch(() => ({}))) as { message?: string }
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "İşlem tamamlanamadı.")
+      }
+
+      return data as T
+    },
+    [token],
+  )
+
+  const loadPanelData = useCallback(
+    async (activeToken = token) => {
+      if (!activeToken) {
+        return
+      }
+
+      setIsLoading(true)
+      setMessage("")
+
+      try {
+        const headers = { Authorization: `Bearer ${activeToken}` }
+        const meData = await fetch(`${apiBaseUrl}/auth/me`, { headers }).then((res) => res.json())
+
+        if (meData.message) {
+          throw new Error(meData.message)
+        }
+
+        const userPermissions = (meData.user?.permissions ?? []) as string[]
+        const canManageRoles = userPermissions.includes("roles.manage")
+        const canManageUsers = userPermissions.includes("users.manage")
+        const canManageSettings = userPermissions.includes("settings.manage")
+        const canUseCalls = userPermissions.some((permission) => permission.startsWith("calls."))
+        const [permissionData, roleData, userData] = await Promise.all([
+          canManageRoles
+            ? fetch(`${apiBaseUrl}/permissions`, { headers }).then((res) => res.json())
+            : Promise.resolve({ permissions: [] }),
+          canManageRoles || canManageUsers
+            ? fetch(`${apiBaseUrl}/roles`, { headers }).then((res) => res.json())
+            : Promise.resolve({ roles: [] }),
+          canManageUsers
+            ? fetch(`${apiBaseUrl}/users`, { headers }).then((res) => res.json())
+            : Promise.resolve({ users: [] }),
+        ])
+
+        if (permissionData.message || roleData.message || userData.message) {
+          throw new Error(permissionData.message ?? roleData.message ?? userData.message)
+        }
+
+        setCurrentUser(meData.user)
+        setPermissions(permissionData.permissions)
+        setRoles(roleData.roles)
+        setUsers(userData.users)
+        setSelectedRoleId((current) => current || roleData.roles[0]?.id || "")
+        setUserForm((current) => ({
+          ...current,
+          roleId: current.roleId || roleData.roles[0]?.id || "",
+        }))
+        setActiveModule((current) => {
+          if (current === "users" && !canManageUsers) {
+            return "dashboard"
+          }
+
+          if (current === "roles" && !canManageRoles) {
+            return "dashboard"
+          }
+
+          if (current === "calls" && !canUseCalls) {
+            return "dashboard"
+          }
+
+          if (current === "settings" && !canManageSettings) {
+            return "dashboard"
+          }
+
+          return current
+        })
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Veriler yüklenemedi.")
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [token],
+  )
+
+  useEffect(() => {
+    if (token) {
+      void loadPanelData(token)
+    }
+  }, [loadPanelData, token])
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      const data = await fetch(`${apiBaseUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginForm),
+      }).then((response) => response.json())
+
+      if (!data.token) {
+        throw new Error(data.message ?? "Giriş yapılamadı.")
+      }
+
+      localStorage.setItem("call-center-token", data.token)
+      setToken(data.token)
+      setCurrentUser(data.user)
+      setMessage("Giriş başarılı.")
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Giriş yapılamadı.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("call-center-token")
+    setToken("")
+    setCurrentUser(null)
+    setPermissions([])
+    setRoles([])
+    setUsers([])
+  }
+
+  function toggleNewRolePermission(permissionId: string) {
+    setRoleForm((current) => {
+      const exists = current.permissions.includes(permissionId)
+      return {
+        ...current,
+        permissions: exists
+          ? current.permissions.filter((id) => id !== permissionId)
+          : [...current.permissions, permissionId],
+      }
+    })
+  }
+
+  async function createRole(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsLoading(true)
+    setMessage("")
+
+    if (roleForm.permissions.length === 0) {
+      setMessage("Rol oluşturmak için en az bir izin seçin.")
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      await request("/roles", {
+        method: "POST",
+        body: JSON.stringify(roleForm),
+      })
+      setRoleForm(emptyRoleForm)
+      setMessage("Rol oluşturuldu.")
+      await loadPanelData()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rol oluşturulamadı.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function saveSelectedRolePermissions() {
+    if (!selectedRole) {
+      return
+    }
+
+    if (selectedRole.permissions.length === 0) {
+      setMessage("Rol üzerinde en az bir izin kalmalıdır.")
+      return
+    }
+
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      await request(`/roles/${selectedRole.id}/permissions`, {
+        method: "PATCH",
+        body: JSON.stringify({ permissions: selectedRole.permissions }),
+      })
+      setMessage("Rol izinleri kaydedildi.")
+      await loadPanelData()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rol izinleri kaydedilemedi.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function toggleSelectedRolePermission(permissionId: string) {
+    if (!selectedRole) {
+      return
+    }
+
+    setRoles((current) =>
+      current.map((role) => {
+        if (role.id !== selectedRole.id) {
+          return role
+        }
+
+        const exists = role.permissions.includes(permissionId)
+
+        return {
+          ...role,
+          permissions: exists
+            ? role.permissions.filter((id) => id !== permissionId)
+            : [...role.permissions, permissionId],
+        }
+      }),
+    )
+  }
+
+  async function createUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsLoading(true)
+    setMessage("")
+
+    if (!isPasswordValid(userForm.password)) {
+      setMessage("Şifre gereksinimleri karşılanmadan kullanıcı oluşturulamaz.")
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      await request("/users", {
+        method: "POST",
+        body: JSON.stringify(userForm),
+      })
+      setUserForm({ ...emptyUserForm, roleId: roles[0]?.id ?? "" })
+      setMessage("Kullanıcı oluşturuldu.")
+      await loadPanelData()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Kullanıcı oluşturulamadı.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return {
+    activeModule,
+    currentUser,
+    isAuthenticated: Boolean(token && currentUser),
+    isLoading,
+    loginForm,
+    message,
+    permissions,
+    permissionsByGroup,
+    request,
+    roleForm,
+    roles,
+    selectedRole,
+    userForm,
+    users,
+    createRole,
+    createUser,
+    handleLogin,
+    handleLogout,
+    loadPanelData,
+    saveSelectedRolePermissions,
+    setActiveModule,
+    setLoginForm,
+    setRoleForm,
+    setSelectedRoleId,
+    setUserForm,
+    toggleNewRolePermission,
+    toggleSelectedRolePermission,
+  }
+}

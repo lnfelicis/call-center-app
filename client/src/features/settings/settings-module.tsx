@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import type { FormEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import type { FormEvent, PointerEvent as ReactPointerEvent } from "react"
 import { GripVertical, Plus, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -10,12 +10,27 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { CallFormOption, CallOptionType, RequestFn } from "@/types"
 
 type SettingsModuleProps = {
   request: RequestFn
+}
+
+type DropPlacement = "before" | "after"
+
+type DragState = {
+  id: string
+  type: CallOptionType
 }
 
 const optionTypeLabels: Record<CallOptionType, string> = {
@@ -34,8 +49,79 @@ export function SettingsModule({ request }: SettingsModuleProps) {
   const [hasChanges, setHasChanges] = useState(false)
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const dragState = useRef<DragState | null>(null)
+  const lastMoveKey = useRef("")
+  const optionsRef = useRef<CallFormOption[]>([])
+  const pendingRects = useRef<Map<string, DOMRect> | null>(null)
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
 
-  async function loadOptions() {
+  useEffect(() => {
+    optionsRef.current = options
+  }, [options])
+
+  useEffect(() => {
+    if (!draggingId) {
+      return
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      event.preventDefault()
+      moveDraggedItem(event.clientY)
+    }
+
+    function handlePointerEnd() {
+      endDrag()
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false })
+    window.addEventListener("pointerup", handlePointerEnd)
+    window.addEventListener("pointercancel", handlePointerEnd)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerEnd)
+      window.removeEventListener("pointercancel", handlePointerEnd)
+    }
+  }, [draggingId])
+
+  useLayoutEffect(() => {
+    const previousRects = pendingRects.current
+
+    if (!previousRects) {
+      return
+    }
+
+    pendingRects.current = null
+
+    rowRefs.current.forEach((element, optionId) => {
+      const previous = previousRects.get(optionId)
+
+      if (!previous) {
+        return
+      }
+
+      const current = element.getBoundingClientRect()
+      const deltaX = previous.left - current.left
+      const deltaY = previous.top - current.top
+
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+        return
+      }
+
+      element.animate(
+        [
+          { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
+          { transform: "translate3d(0, 0, 0)" },
+        ],
+        {
+          duration: 170,
+          easing: "cubic-bezier(0.2, 0, 0, 1)",
+        },
+      )
+    })
+  }, [options])
+
+  const loadOptions = useCallback(async () => {
     setIsLoading(true)
     setMessage("")
 
@@ -48,11 +134,11 @@ export function SettingsModule({ request }: SettingsModuleProps) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [request])
 
   useEffect(() => {
     void loadOptions()
-  }, [])
+  }, [loadOptions])
 
   async function createOption(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -99,26 +185,137 @@ export function SettingsModule({ request }: SettingsModuleProps) {
     setHasChanges(true)
   }
 
-  function reorderOption(type: CallOptionType, targetId: string) {
-    if (!draggingId || draggingId === targetId) {
+  function captureRowRects() {
+    pendingRects.current = new Map(
+      [...rowRefs.current.entries()].map(([optionId, element]) => [
+        optionId,
+        element.getBoundingClientRect(),
+      ]),
+    )
+  }
+
+  function beginDrag(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    type: CallOptionType,
+    optionId: string,
+  ) {
+    if (event.button !== 0) {
       return
     }
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    document.body.style.userSelect = "none"
+    dragState.current = { id: optionId, type }
+    lastMoveKey.current = ""
+    setDraggingId(optionId)
+  }
+
+  function moveDraggedItem(clientY: number) {
+    const currentDrag = dragState.current
+
+    if (!currentDrag) {
+      return
+    }
+
+    const candidates = optionsRef.current
+      .filter((option) => option.type === currentDrag.type && option.id !== currentDrag.id)
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+
+    if (candidates.length === 0) {
+      return
+    }
+
+    let targetId = candidates[candidates.length - 1].id
+    let placement: DropPlacement = "after"
+
+    for (const option of candidates) {
+      const element = rowRefs.current.get(option.id)
+
+      if (!element) {
+        continue
+      }
+
+      const rect = element.getBoundingClientRect()
+
+      if (clientY < rect.top + rect.height / 2) {
+        targetId = option.id
+        placement = "before"
+        break
+      }
+    }
+
+    scheduleReorder(currentDrag.id, currentDrag.type, targetId, placement)
+  }
+
+  function endDrag(event?: ReactPointerEvent<HTMLButtonElement>) {
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    document.body.style.userSelect = ""
+    dragState.current = null
+    lastMoveKey.current = ""
+    pendingRects.current = null
+    setDraggingId(null)
+  }
+
+  function scheduleReorder(
+    draggedId: string,
+    type: CallOptionType,
+    targetId: string,
+    placement: DropPlacement,
+  ) {
+    if (draggedId === targetId) {
+      return
+    }
+
+    const moveKey = `${draggedId}:${targetId}:${placement}`
+
+    if (lastMoveKey.current === moveKey) {
+      return
+    }
+
+    lastMoveKey.current = moveKey
+    reorderOption(draggedId, type, targetId, placement)
+  }
+
+  function reorderOption(
+    draggedId: string,
+    type: CallOptionType,
+    targetId: string,
+    placement: DropPlacement,
+  ) {
+    captureRowRects()
+    setHasChanges(true)
 
     setOptions((current) => {
       const sameType = current
         .filter((option) => option.type === type)
         .sort((first, second) => first.sortOrder - second.sortOrder)
       const others = current.filter((option) => option.type !== type)
-      const draggingIndex = sameType.findIndex((option) => option.id === draggingId)
+      const draggingIndex = sameType.findIndex((option) => option.id === draggedId)
       const targetIndex = sameType.findIndex((option) => option.id === targetId)
 
       if (draggingIndex === -1 || targetIndex === -1) {
+        pendingRects.current = null
+        return current
+      }
+
+      let insertionIndex = targetIndex + (placement === "after" ? 1 : 0)
+
+      if (draggingIndex < insertionIndex) {
+        insertionIndex -= 1
+      }
+
+      if (draggingIndex === insertionIndex) {
+        pendingRects.current = null
         return current
       }
 
       const reordered = [...sameType]
       const [dragged] = reordered.splice(draggingIndex, 1)
-      reordered.splice(targetIndex, 0, dragged)
+      reordered.splice(insertionIndex, 0, dragged)
 
       return [
         ...others,
@@ -134,12 +331,11 @@ export function SettingsModule({ request }: SettingsModuleProps) {
         return first.type.localeCompare(second.type)
       })
     })
-    setHasChanges(true)
   }
 
   return (
-    <div className="settings-module">
-      {message && <p className="module-message">{message}</p>}
+    <div className="grid gap-4">
+      {message && <p className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">{message}</p>}
 
       <Card>
         <CardHeader>
@@ -149,28 +345,32 @@ export function SettingsModule({ request }: SettingsModuleProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="settings-option-form" onSubmit={createOption}>
-            <label>
+          <form className="grid gap-3 lg:grid-cols-[minmax(190px,0.8fr)_minmax(260px,1.2fr)_auto_auto] lg:items-end" onSubmit={createOption}>
+            <div className="grid gap-2">
               <Label>Seçenek türü</Label>
-              <select
-                className="select-control"
+              <Select
                 value={form.type}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, type: event.target.value as CallOptionType }))
+                onValueChange={(type) =>
+                  setForm((current) => ({ ...current, type: type as CallOptionType }))
                 }
               >
-                <option value="interaction_type">Görüşme tipi</option>
-                <option value="issue_category">Sorun kategorisi</option>
-              </select>
-            </label>
-            <label>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="interaction_type">Görüşme tipi</SelectItem>
+                  <SelectItem value="issue_category">Sorun kategorisi</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
               <Label>Seçenek adı</Label>
               <Input
                 value={form.label}
                 onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
                 placeholder="Örn. Telefon dönüşü"
               />
-            </label>
+            </div>
             <Button type="submit" disabled={isLoading || form.label.trim().length < 2}>
               <Plus />
               Ekle
@@ -183,7 +383,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
         </CardContent>
       </Card>
 
-      <div className="settings-grid">
+      <div className="grid items-start gap-4 xl:grid-cols-2">
         {(Object.keys(optionTypeLabels) as CallOptionType[]).map((type) => (
           <Card key={type}>
             <CardHeader>
@@ -191,33 +391,41 @@ export function SettingsModule({ request }: SettingsModuleProps) {
               <CardDescription>Aktif seçenekler çağrı formunda gösterilir.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="option-list">
+              <div className="grid gap-2">
                 {options
                   .filter((option) => option.type === type)
                   .sort((first, second) => first.sortOrder - second.sortOrder)
                   .map((option) => (
                     <div
-                      className="option-row"
+                      className="grid grid-cols-[1.75rem_minmax(180px,1fr)_auto] items-center gap-2 rounded-lg border bg-background p-2 shadow-xs transition-[background-color,border-color,box-shadow,opacity] duration-150 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:opacity-70 data-[dragging=true]:shadow-md max-sm:grid-cols-1"
                       key={option.id}
-                      draggable
+                      ref={(node) => {
+                        if (node) {
+                          rowRefs.current.set(option.id, node)
+                        } else {
+                          rowRefs.current.delete(option.id)
+                        }
+                      }}
                       data-dragging={draggingId === option.id}
-                      onDragStart={() => setDraggingId(option.id)}
-                      onDragEnd={() => setDraggingId(null)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => reorderOption(type, option.id)}
                     >
-                      <span className="drag-handle" aria-hidden="true">
-                        <GripVertical />
-                      </span>
+                      <button
+                        type="button"
+                        className="grid size-7 cursor-grab touch-none place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing max-sm:hidden"
+                        onPointerDown={(event) => beginDrag(event, type, option.id)}
+                        onPointerUp={endDrag}
+                        onPointerCancel={endDrag}
+                        title="Sırala"
+                      >
+                        <GripVertical className="size-4" />
+                      </button>
                       <Input
                         value={option.label}
                         onChange={(event) => patchLocalOption(option.id, { label: event.target.value })}
                       />
-                      <label className="compact-check">
-                        <input
-                          type="checkbox"
+                      <label className="flex items-center gap-2 text-sm font-medium">
+                        <Checkbox
                           checked={option.isActive}
-                          onChange={(event) => patchLocalOption(option.id, { isActive: event.target.checked })}
+                          onCheckedChange={(checked) => patchLocalOption(option.id, { isActive: checked === true })}
                         />
                         Aktif
                       </label>

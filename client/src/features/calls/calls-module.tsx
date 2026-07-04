@@ -9,7 +9,6 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
-  X,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -21,8 +20,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import type {
   AuthUser,
   CallDetail,
@@ -70,6 +86,14 @@ const priorityLabels: Record<CallPriority, string> = {
   normal: "Normal",
   high: "Yüksek",
   urgent: "Acil",
+}
+
+const noteTypeLabels = {
+  personnel: "Personel Notu",
+  follow_up: "Takip Notu",
+  assigned_personnel: "Atanan Personel Notu",
+  internal: "İç Not",
+  manager: "Yönetici Notu",
 }
 
 export function CallsModule({ currentUser, request }: CallsModuleProps) {
@@ -293,15 +317,15 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   }
 
   return (
-    <div className="calls-module">
-      <div className="module-toolbar">
-        <div className="call-stats">
-          <span><ClipboardList /> {calls.length} kayıt</span>
-          <span><Phone /> {listSummary.open} açık</span>
-          <span><CheckCircle2 /> {listSummary.resolved} çözüldü</span>
-          <span><FileText /> {listSummary.followUp} takip</span>
+    <div className="grid gap-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <Stat icon={<ClipboardList />} label={`${calls.length} kayıt`} />
+          <Stat icon={<Phone />} label={`${listSummary.open} açık`} />
+          <Stat icon={<CheckCircle2 />} label={`${listSummary.resolved} çözüldü`} />
+          <Stat icon={<FileText />} label={`${listSummary.followUp} takip`} />
         </div>
-        <div className="toolbar-actions">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => void loadCalls()} disabled={isLoading}>
             <RefreshCw />
             Yenile
@@ -315,29 +339,31 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
         </div>
       </div>
 
-      {message && <p className="module-message">{message}</p>}
+      {message && <p className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">{message}</p>}
 
-      <div className="calls-layout">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
         <Card>
           <CardHeader>
             <CardTitle>Çağrı Kayıtları</CardTitle>
             <CardDescription>Yetkiniz kapsamındaki kayıtlar listelenir.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="call-list">
+            <div className="grid gap-2">
               {calls.map((call) => (
                 <button
                   key={call.id}
                   type="button"
-                  className="call-row"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted data-[active=true]:border-primary data-[active=true]:bg-primary/5"
                   data-active={call.id === selectedCallId}
                   onClick={() => setSelectedCallId(call.id)}
                 >
-                  <span>
-                    <strong>{call.recordNumber}</strong>
-                    <small>{call.studentName || call.phoneNumber}</small>
+                  <span className="min-w-0">
+                    <strong className="block truncate text-sm font-medium">{call.recordNumber}</strong>
+                    <small className="block truncate text-xs text-muted-foreground">
+                      {call.studentName || call.phoneNumber}
+                    </small>
                   </span>
-                  <span>
+                  <span className="flex flex-wrap justify-end gap-1.5">
                     <Badge variant="outline">{statusLabels[call.status]}</Badge>
                     <Badge variant={call.priority === "urgent" ? "default" : "secondary"}>
                       {priorityLabels[call.priority]}
@@ -345,7 +371,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                   </span>
                 </button>
               ))}
-              {calls.length === 0 && <p className="empty-state">Henüz görüntülenecek çağrı kaydı yok.</p>}
+              {calls.length === 0 && <p className="text-sm text-muted-foreground">Henüz görüntülenecek çağrı kaydı yok.</p>}
             </div>
           </CardContent>
         </Card>
@@ -357,82 +383,88 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
           </CardHeader>
           <CardContent>
             {selectedCall ? (
-              <div className="call-detail">
-                <div className="detail-header">
-                  <div>
-                    <strong>{selectedCall.recordNumber}</strong>
-                    <span>{selectedCall.category} · {selectedCall.interactionType}</span>
+              <div className="grid gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-medium">{selectedCall.recordNumber}</strong>
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {selectedCall.category} · {selectedCall.interactionType}
+                    </span>
                   </div>
                   <Badge variant={selectedCall.status === "resolved" ? "default" : "outline"}>
                     {statusLabels[selectedCall.status]}
                   </Badge>
                 </div>
 
-                <div className="detail-grid">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   <Info label="Telefon" value={selectedCall.phoneNumber} />
                   <Info label="Öğrenci TC" value={selectedCall.studentTc ?? "-"} />
                   <Info label="Öğrenci" value={selectedCall.studentName ?? "-"} />
                   <Info label="Açan" value={selectedCall.openedByName} />
-                <Info label="Öncelik" value={priorityLabels[selectedCall.priority]} />
-              </div>
-
-                <section className="detail-section">
-                  <h3>Yaşanılan sorun</h3>
-                  <p>{selectedCall.issue}</p>
-                </section>
-
-                {selectedCall.initialNote && (
-                  <section className="detail-section">
-                    <h3>İlk personel notu</h3>
-                    <p>{selectedCall.initialNote}</p>
-                  </section>
-                )}
-
-                <div className="action-strip">
-                  {canEdit && !selectedCall.isLocked && (
-                    <label>
-                      <span>Durum</span>
-                      <select
-                        className="select-control"
-                        value={selectedCall.status}
-                        onChange={(event) => void updateStatus(event.target.value as CallStatus)}
-                      >
-                        {Object.entries(statusLabels)
-                          .filter(([status]) => status !== "resolved")
-                          .map(([status, label]) => (
-                            <option key={status} value={status}>
-                              {label}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  )}
+                  <Info label="Öncelik" value={priorityLabels[selectedCall.priority]} />
                 </div>
 
-                {canAddAnyNote && !selectedCall.isLocked && (
-                  <form className="inline-form" onSubmit={addNote}>
-                    <label>
-                      <span>Not türü</span>
-                      <select
-                        className="select-control"
-                        value={noteForm.noteType}
-                        onChange={(event) => setNoteForm((current) => ({ ...current, noteType: event.target.value }))}
+                <DetailSection title="Yaşanılan sorun">{selectedCall.issue}</DetailSection>
+
+                {selectedCall.initialNote && (
+                  <DetailSection title="İlk personel notu">{selectedCall.initialNote}</DetailSection>
+                )}
+
+                {canEdit && !selectedCall.isLocked && (
+                  <div className="border-t pt-4">
+                    <div className="grid gap-2 sm:max-w-xs">
+                      <Label>Durum</Label>
+                      <Select
+                        value={selectedCall.status}
+                        onValueChange={(status) => void updateStatus(status as CallStatus)}
                       >
-                        <option value="personnel">Personel Notu</option>
-                        <option value="follow_up">Takip Notu</option>
-                        <option value="assigned_personnel">Atanan Personel Notu</option>
-                        <option value="internal">İç Not</option>
-                        <option value="manager">Yönetici Notu</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Not</span>
-                      <textarea
-                        value={noteForm.content}
-                        onChange={(event) => setNoteForm((current) => ({ ...current, content: event.target.value }))}
-                        placeholder="Not içeriği"
-                      />
-                    </label>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(statusLabels)
+                            .filter(([status]) => status !== "resolved")
+                            .map(([status, label]) => (
+                              <SelectItem key={status} value={status}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {canAddAnyNote && !selectedCall.isLocked && (
+                  <form className="grid gap-3 border-t pt-4" onSubmit={addNote}>
+                    <div className="grid gap-3 sm:grid-cols-[minmax(180px,0.35fr)_minmax(260px,1fr)]">
+                      <div className="grid gap-2">
+                        <Label>Not türü</Label>
+                        <Select
+                          value={noteForm.noteType}
+                          onValueChange={(noteType) => setNoteForm((current) => ({ ...current, noteType }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(noteTypeLabels).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Not</Label>
+                        <Textarea
+                          value={noteForm.content}
+                          onChange={(event) => setNoteForm((current) => ({ ...current, content: event.target.value }))}
+                          placeholder="Not içeriği"
+                        />
+                      </div>
+                    </div>
                     <Button type="submit" disabled={isLoading || !noteForm.content.trim()}>
                       <MessageSquarePlus />
                       Not ekle
@@ -441,31 +473,33 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                 )}
 
                 {canResolve && !selectedCall.isLocked && (
-                  <form className="inline-form" onSubmit={resolveCall}>
-                    <label>
-                      <span>Çözüm kategorisi</span>
-                      <Input
-                        value={resolutionForm.resolutionCategory}
-                        onChange={(event) =>
-                          setResolutionForm((current) => ({
-                            ...current,
-                            resolutionCategory: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>Çözüm açıklaması</span>
-                      <textarea
-                        value={resolutionForm.resolutionDescription}
-                        onChange={(event) =>
-                          setResolutionForm((current) => ({
-                            ...current,
-                            resolutionDescription: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
+                  <form className="grid gap-3 border-t pt-4" onSubmit={resolveCall}>
+                    <div className="grid gap-3 sm:grid-cols-[minmax(180px,0.35fr)_minmax(260px,1fr)]">
+                      <div className="grid gap-2">
+                        <Label>Çözüm kategorisi</Label>
+                        <Input
+                          value={resolutionForm.resolutionCategory}
+                          onChange={(event) =>
+                            setResolutionForm((current) => ({
+                              ...current,
+                              resolutionCategory: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Çözüm açıklaması</Label>
+                        <Textarea
+                          value={resolutionForm.resolutionDescription}
+                          onChange={(event) =>
+                            setResolutionForm((current) => ({
+                              ...current,
+                              resolutionDescription: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
                     <Button type="submit" disabled={isLoading || !resolutionForm.resolutionDescription.trim()}>
                       <CheckCircle2 />
                       Çözüldü yap
@@ -480,182 +514,235 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                   </Button>
                 )}
 
-                <section className="detail-section">
-                  <h3>Ek notlar</h3>
-                  <div className="timeline-list">
+                <section className="border-t pt-4">
+                  <h3 className="mb-2 text-sm font-semibold">Ek notlar</h3>
+                  <div className="grid gap-2">
                     {selectedDetail?.notes.map((note) => (
-                      <div key={note.id}>
-                        <strong>{note.authorName}</strong>
-                        <span>{note.noteType} · {formatDate(note.createdAt)}</span>
-                        <p>{note.content}</p>
-                      </div>
+                      <TimelineItem
+                        key={note.id}
+                        title={note.authorName}
+                        meta={`${noteTypeLabels[note.noteType as keyof typeof noteTypeLabels] ?? note.noteType} · ${formatDate(note.createdAt)}`}
+                      >
+                        {note.content}
+                      </TimelineItem>
                     ))}
-                    {selectedDetail?.notes.length === 0 && <p className="empty-state">Ek not yok.</p>}
+                    {selectedDetail?.notes.length === 0 && <p className="text-sm text-muted-foreground">Ek not yok.</p>}
                   </div>
                 </section>
 
-                <section className="detail-section">
-                  <h3>İşlem geçmişi</h3>
-                  <div className="timeline-list">
+                <section className="border-t pt-4">
+                  <h3 className="mb-2 text-sm font-semibold">İşlem geçmişi</h3>
+                  <div className="grid gap-2">
                     {selectedDetail?.events.map((event) => (
-                      <div key={event.id}>
-                        <strong>{event.actorName ?? "Sistem"}</strong>
-                        <span>{formatDate(event.createdAt)}</span>
-                        <p>{event.description}</p>
-                      </div>
+                      <TimelineItem
+                        key={event.id}
+                        title={event.actorName ?? "Sistem"}
+                        meta={formatDate(event.createdAt)}
+                      >
+                        {event.description}
+                      </TimelineItem>
                     ))}
                   </div>
                 </section>
               </div>
             ) : (
-              <p className="empty-state">Detay görmek için bir çağrı kaydı seçin.</p>
+              <p className="text-sm text-muted-foreground">Detay görmek için bir çağrı kaydı seçin.</p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {isCreateOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-panel">
-            <div className="modal-header">
-              <div>
-                <h2>Yeni Çağrı Kaydı</h2>
-                <p>Kayıt oluşturulduktan sonra ana bilgiler personel tarafından değiştirilemez.</p>
-              </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setIsCreateOpen(false)}>
-                <X />
-              </Button>
-            </div>
-            <form className="call-form" onSubmit={createCall}>
-              <div className="two-column">
-                <Field label="Telefon numarası">
-                  <Input
-                    value={callForm.phoneNumber}
-                    onChange={(event) => setCallForm((current) => ({ ...current, phoneNumber: event.target.value }))}
-                    required
-                  />
-                </Field>
-                <Field label="Öğrenci TC">
-                  <Input
-                    value={callForm.studentTc}
-                    onChange={(event) => setCallForm((current) => ({ ...current, studentTc: event.target.value }))}
-                    maxLength={11}
-                  />
-                </Field>
-              </div>
-              <div className="two-column">
-                <Field label="Öğrenci adı soyadı">
-                  <Input
-                    value={callForm.studentName}
-                    onChange={(event) => setCallForm((current) => ({ ...current, studentName: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Görüşme tipi">
-                  <select
-                    className="select-control"
-                    value={callForm.interactionType}
-                    onChange={(event) =>
-                      setCallForm((current) => ({ ...current, interactionType: event.target.value }))
-                    }
-                    required
-                  >
-                    {interactionTypes.map((option) => (
-                      <option key={option.id} value={option.label}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <div className="two-column">
-                <Field label="Sorun kategorisi">
-                  <select
-                    className="select-control"
-                    value={callForm.category}
-                    onChange={(event) => setCallForm((current) => ({ ...current, category: event.target.value }))}
-                    required
-                  >
-                    {issueCategories.map((option) => (
-                      <option key={option.id} value={option.label}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Öncelik">
-                  <select
-                    className="select-control"
-                    value={callForm.priority}
-                    onChange={(event) =>
-                      setCallForm((current) => ({ ...current, priority: event.target.value as CallPriority }))
-                    }
-                  >
-                    {Object.entries(priorityLabels).map(([priority, label]) => (
-                      <option key={priority} value={priority}>{label}</option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <Field label="Yaşanılan sorun">
-                <textarea
-                  value={callForm.issue}
-                  onChange={(event) => setCallForm((current) => ({ ...current, issue: event.target.value }))}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Yeni Çağrı Kaydı</DialogTitle>
+            <DialogDescription>
+              Kayıt oluşturulduktan sonra ana bilgiler personel tarafından değiştirilemez.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="grid gap-4" onSubmit={createCall}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Telefon numarası">
+                <Input
+                  value={callForm.phoneNumber}
+                  onChange={(event) => setCallForm((current) => ({ ...current, phoneNumber: event.target.value }))}
                   required
                 />
               </Field>
-              <Field label="İlk personel notu">
-                <textarea
-                  value={callForm.initialNote}
-                  onChange={(event) => setCallForm((current) => ({ ...current, initialNote: event.target.value }))}
+              <Field label="Öğrenci TC">
+                <Input
+                  value={callForm.studentTc}
+                  onChange={(event) => setCallForm((current) => ({ ...current, studentTc: event.target.value }))}
+                  maxLength={11}
                 />
               </Field>
-              <div className="follow-up-row">
-                <label className="check-row">
-                <input
-                  type="checkbox"
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Öğrenci adı soyadı">
+                <Input
+                  value={callForm.studentName}
+                  onChange={(event) => setCallForm((current) => ({ ...current, studentName: event.target.value }))}
+                />
+              </Field>
+              <div className="grid gap-2">
+                <Label>Görüşme tipi</Label>
+                <Select
+                  value={callForm.interactionType}
+                  onValueChange={(interactionType) =>
+                    setCallForm((current) => ({ ...current, interactionType }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Görüşme tipi seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {interactionTypes.map((option) => (
+                      <SelectItem key={option.id} value={option.label}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Sorun kategorisi</Label>
+                <Select
+                  value={callForm.category}
+                  onValueChange={(category) => setCallForm((current) => ({ ...current, category }))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Sorun kategorisi seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {issueCategories.map((option) => (
+                      <SelectItem key={option.id} value={option.label}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Öncelik</Label>
+                <Select
+                  value={callForm.priority}
+                  onValueChange={(priority) =>
+                    setCallForm((current) => ({ ...current, priority: priority as CallPriority }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(priorityLabels).map(([priority, label]) => (
+                      <SelectItem key={priority} value={priority}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Field label="Yaşanılan sorun">
+              <Textarea
+                value={callForm.issue}
+                onChange={(event) => setCallForm((current) => ({ ...current, issue: event.target.value }))}
+                required
+              />
+            </Field>
+            <Field label="İlk personel notu">
+              <Textarea
+                value={callForm.initialNote}
+                onChange={(event) => setCallForm((current) => ({ ...current, initialNote: event.target.value }))}
+              />
+            </Field>
+            <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[max-content_minmax(260px,1fr)] sm:items-end">
+              <label className="flex min-h-8 items-center gap-2 text-sm font-medium">
+                <Checkbox
                   checked={callForm.needsFollowUp}
-                  onChange={(event) =>
-                    setCallForm((current) => ({ ...current, needsFollowUp: event.target.checked }))
+                  onCheckedChange={(checked) =>
+                    setCallForm((current) => ({ ...current, needsFollowUp: checked === true }))
                   }
                 />
                 Takip gerekiyor
-                </label>
-                {callForm.needsFollowUp && (
-                  <Field label="Takip tarihi">
-                    <Input
-                      type="datetime-local"
-                      value={callForm.followUpAt}
-                      onChange={(event) => setCallForm((current) => ({ ...current, followUpAt: event.target.value }))}
-                      required
-                    />
-                  </Field>
-                )}
-              </div>
-              <div className="modal-actions">
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
-                  Vazgeç
-                </Button>
-                <Button type="submit" disabled={isLoading}>
-                  <Plus />
-                  Kaydı oluştur
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              </label>
+              {callForm.needsFollowUp && (
+                <Field label="Takip tarihi">
+                  <Input
+                    type="datetime-local"
+                    value={callForm.followUpAt}
+                    onChange={(event) => setCallForm((current) => ({ ...current, followUpAt: event.target.value }))}
+                    required
+                  />
+                </Field>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                Vazgeç
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                <Plus />
+                Kaydı oluştur
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+}
+
+function Stat({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <span className="inline-flex min-h-8 items-center gap-2 rounded-lg border bg-background px-3 text-sm text-muted-foreground [&_svg]:size-4 [&_svg]:text-primary">
+      {icon}
+      {label}
+    </span>
   )
 }
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="info-cell">
-      <span>{label}</span>
-      <strong>{value}</strong>
+    <div className="rounded-lg border p-3">
+      <span className="block text-xs text-muted-foreground">{label}</span>
+      <strong className="mt-1 block break-words text-sm font-medium">{value}</strong>
+    </div>
+  )
+}
+
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="border-t pt-4">
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      <p className="text-sm leading-6 text-muted-foreground">{children}</p>
+    </section>
+  )
+}
+
+function TimelineItem({
+  title,
+  meta,
+  children,
+}: {
+  title: string
+  meta: string
+  children: ReactNode
+}) {
+  return (
+    <div className="rounded-lg border p-3">
+      <strong className="block text-sm font-medium">{title}</strong>
+      <span className="mt-1 block text-xs text-muted-foreground">{meta}</span>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{children}</p>
     </div>
   )
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="field">
+    <label className="grid gap-2">
       <Label>{label}</Label>
       {children}
     </label>

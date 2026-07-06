@@ -284,6 +284,10 @@ function normalizeRequiredString(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function normalizePhoneForMatch(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 function normalizePriority(value: unknown): CallPriority {
   const priority = String(value ?? "normal") as CallPriority;
   return allowedPriorities.includes(priority) ? priority : "normal";
@@ -291,6 +295,10 @@ function normalizePriority(value: unknown): CallPriority {
 
 function normalizeBoolean(value: unknown) {
   return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function phoneMatchSqlExpression(columnName: string) {
+  return `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${columnName}, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '')`;
 }
 
 function isValidTurkishIdentityNumber(value: string) {
@@ -682,6 +690,94 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
     warnings,
   });
 });
+
+callRoutes.get(
+  "/calls/matches",
+  requirePermission("calls.create"),
+  async (req: AuthenticatedRequest, res) => {
+    const phoneNumber = normalizePhoneForMatch(req.query.phoneNumber);
+    const studentTc = normalizeRequiredString(req.query.studentTc);
+    const fields = await getFieldSettings();
+
+    const visibilityParams: string[] = [];
+    const visibilityConditions: string[] = [];
+
+    if (!hasPermission(req, "calls.view.all")) {
+      const scopedConditions: string[] = [];
+
+      if (hasPermission(req, "calls.view.own")) {
+        scopedConditions.push("call_records.opened_by_user_id = ?");
+        visibilityParams.push(req.user?.id ?? "");
+      }
+
+      scopedConditions.push("call_records.assigned_to_user_id = ?");
+      visibilityParams.push(req.user?.id ?? "");
+      visibilityConditions.push(`(${scopedConditions.join(" OR ")})`);
+    }
+
+    const baseWhere = visibilityConditions.length > 0 ? ` AND ${visibilityConditions.join(" AND ")}` : "";
+    const phoneExpression = phoneMatchSqlExpression("call_records.phone_number");
+    const matchSelect = `SELECT
+        call_records.*,
+        opened_by.full_name AS opened_by_name,
+        assigned_to.full_name AS assigned_to_name,
+        resolved_by.full_name AS resolved_by_name
+      FROM call_records
+      INNER JOIN users opened_by ON opened_by.id = call_records.opened_by_user_id
+      LEFT JOIN users assigned_to ON assigned_to.id = call_records.assigned_to_user_id
+      LEFT JOIN users resolved_by ON resolved_by.id = call_records.resolved_by_user_id`;
+
+    let phoneMatches: CallRow[] = [];
+    let tcMatches: CallRow[] = [];
+
+    const hasPhoneFilter = phoneNumber.length >= 7;
+    const hasTcFilter = /^\d{11}$/.test(studentTc);
+
+    if (hasPhoneFilter) {
+      const phoneConditions = [`${phoneExpression} = ?`];
+      const phoneParams: string[] = [phoneNumber];
+
+      if (phoneNumber.length >= 10) {
+        phoneConditions.push(`RIGHT(${phoneExpression}, 10) = ?`);
+        phoneParams.push(phoneNumber.slice(-10));
+      }
+
+      if (hasTcFilter) {
+        const [rows] = await db.query<CallRow[]>(
+          `${matchSelect}
+          WHERE (${phoneConditions.join(" OR ")}) AND call_records.student_tc = ?${baseWhere}
+          ORDER BY call_records.created_at DESC
+          LIMIT 5`,
+          [...phoneParams, studentTc, ...visibilityParams],
+        );
+        phoneMatches = rows;
+      } else {
+        const [rows] = await db.query<CallRow[]>(
+          `${matchSelect}
+          WHERE (${phoneConditions.join(" OR ")})${baseWhere}
+          ORDER BY call_records.created_at DESC
+          LIMIT 5`,
+          [...phoneParams, ...visibilityParams],
+        );
+        phoneMatches = rows;
+      }
+    } else if (hasTcFilter) {
+      const [rows] = await db.query<CallRow[]>(
+        `${matchSelect}
+        WHERE call_records.student_tc = ?${baseWhere}
+        ORDER BY call_records.created_at DESC
+        LIMIT 5`,
+        [studentTc, ...visibilityParams],
+      );
+      tcMatches = rows;
+    }
+
+    res.json({
+      phoneMatches: phoneMatches.map((call) => serializeCall(req, call, fields)),
+      tcMatches: tcMatches.map((call) => serializeCall(req, call, fields)),
+    });
+  },
+);
 
 callRoutes.get("/calls/:id", async (req: AuthenticatedRequest, res) => {
   const call = await ensureCanViewCall(req, String(req.params.id ?? ""), res);

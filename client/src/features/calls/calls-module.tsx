@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent, ReactNode } from "react"
 import {
   CheckCircle2,
@@ -45,6 +45,7 @@ import type {
   CallDetail,
   CallForm,
   CallFormFieldSetting,
+  CallMatches,
   CallFormOption,
   CallPriority,
   CallRecord,
@@ -120,6 +121,8 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   const [editError, setEditError] = useState("")
   const [createFieldErrors, setCreateFieldErrors] = useState<CallFormErrors>({})
   const [editFieldErrors, setEditFieldErrors] = useState<CallFormErrors>({})
+  const [callMatches, setCallMatches] = useState<CallMatches>({ phoneMatches: [], tcMatches: [] })
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false)
   const [activeScope, setActiveScope] = useState<"own" | "all">("own")
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -320,6 +323,42 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     }
   }
 
+  const loadCallMatches = useCallback(async (signal?: AbortSignal) => {
+    const phoneDigits = callForm.phoneNumber.replace(/\D/g, "")
+    const studentTc = callForm.studentTc.trim()
+
+    if (!isCreateOpen || (phoneDigits.length < 7 && studentTc.length !== 11)) {
+      setCallMatches({ phoneMatches: [], tcMatches: [] })
+      setIsLoadingMatches(false)
+      return
+    }
+
+    setIsLoadingMatches(true)
+
+    try {
+      const params = new URLSearchParams()
+
+      if (phoneDigits.length >= 7) {
+        params.set("phoneNumber", callForm.phoneNumber)
+      }
+
+      if (studentTc.length === 11) {
+        params.set("studentTc", studentTc)
+      }
+
+      const data = await request<CallMatches>(`/calls/matches?${params.toString()}`, { signal })
+      setCallMatches(data)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+
+      setCallMatches({ phoneMatches: [], tcMatches: [] })
+    } finally {
+      setIsLoadingMatches(false)
+    }
+  }, [callForm.phoneNumber, callForm.studentTc, isCreateOpen, request])
+
   useEffect(() => {
     void loadCalls()
   }, [])
@@ -327,6 +366,18 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   useEffect(() => {
     void loadCallDetail(selectedCallId)
   }, [selectedCallId])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      void loadCallMatches(controller.signal)
+    }, 400)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [loadCallMatches])
 
   useEffect(() => {
     if (!canViewAll && activeScope === "all") {
@@ -373,7 +424,21 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     if (open) {
       setCreateError("")
       setCreateFieldErrors({})
+    } else {
+      setCallMatches({ phoneMatches: [], tcMatches: [] })
+      setIsLoadingMatches(false)
     }
+  }
+
+  function openMatchedCall(callId: string) {
+    setCreateDialogOpen(false)
+
+    if (canViewAll) {
+      setActiveScope("all")
+    }
+
+    setSelectedCallId(callId)
+    void loadCallDetail(callId)
   }
 
   async function updateCall(event: FormEvent<HTMLFormElement>) {
@@ -851,6 +916,12 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                 />
               </Field>
             </div>
+            <CallMatchPreview
+              matches={callMatches}
+              isLoading={isLoadingMatches}
+              isCombinedFilter={callForm.phoneNumber.replace(/\D/g, "").length >= 7 && callForm.studentTc.trim().length === 11}
+              onOpenCall={openMatchedCall}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Öğrenci adı soyadı" error={createFieldErrors.studentName}>
                 <Input
@@ -1189,6 +1260,95 @@ function TimelineItem({
       <strong className="block text-sm font-medium">{title}</strong>
       <span className="mt-1 block text-xs text-muted-foreground">{meta}</span>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{children}</p>
+    </div>
+  )
+}
+
+function CallMatchPreview({
+  matches,
+  isLoading,
+  isCombinedFilter,
+  onOpenCall,
+}: {
+  matches: CallMatches
+  isLoading: boolean
+  isCombinedFilter: boolean
+  onOpenCall: (callId: string) => void
+}) {
+  const hasPhoneMatches = matches.phoneMatches.length > 0
+  const hasTcMatches = !isCombinedFilter && matches.tcMatches.length > 0
+
+  if (!isLoading && !hasPhoneMatches && !hasTcMatches) {
+    return null
+  }
+
+  return (
+    <section className="grid gap-3 rounded-lg border bg-muted/30 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Geçmiş çağrı eşleşmeleri</h3>
+          <p className="text-xs text-muted-foreground">
+            Telefon numarası veya TC Kimlik No ile daha önce açılmış kayıtlar.
+          </p>
+        </div>
+        {isLoading && <Badge variant="outline">Aranıyor</Badge>}
+      </div>
+
+      {hasPhoneMatches && (
+        <MatchGroup
+          title={isCombinedFilter ? "Telefon + TC Kimlik No eşleşmeleri" : "Telefon numarası eşleşmeleri"}
+          calls={matches.phoneMatches}
+          onOpenCall={onOpenCall}
+        />
+      )}
+      {hasTcMatches && (
+        <MatchGroup title="TC Kimlik No eşleşmeleri" calls={matches.tcMatches} onOpenCall={onOpenCall} />
+      )}
+    </section>
+  )
+}
+function MatchGroup({
+  title,
+  calls,
+  onOpenCall,
+}: {
+  title: string
+  calls: CallRecord[]
+  onOpenCall: (callId: string) => void
+}) {
+  return (
+    <div className="grid gap-2">
+      <h4 className="text-xs font-medium text-muted-foreground">{title}</h4>
+      <div className="grid gap-2">
+        {calls.map((call) => (
+          <div
+            key={call.id}
+            className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-sm font-medium">{call.recordNumber}</strong>
+                <Badge variant="outline">{statusLabels[call.status]}</Badge>
+                <Badge variant={call.priority === "urgent" ? "default" : "secondary"}>
+                  {priorityLabels[call.priority]}
+                </Badge>
+              </div>
+              <p className="mt-1 truncate text-sm text-muted-foreground">
+                {call.studentName || call.phoneNumber} · {call.category}
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {call.issue}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {formatDate(call.createdAt)} · Açan: {call.openedByName}
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenCall(call.id)}>
+              Detayı aç
+            </Button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

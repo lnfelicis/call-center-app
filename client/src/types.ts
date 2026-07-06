@@ -98,6 +98,11 @@ export type CallRecord = {
   updatedAt: string
 }
 
+export type CallMatches = {
+  phoneMatches: CallRecord[]
+  tcMatches: CallRecord[]
+}
+
 export type CallNote = {
   id: string
   callId: string

@@ -2,6 +2,7 @@
   "name": "call-center-app",
   "private": true,
   "scripts": {
+    "dev": "pnpm -r --parallel dev",
     "dev:client": "pnpm --filter client dev",
     "dev:server": "pnpm --filter server dev"
   },

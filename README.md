@@ -98,6 +98,12 @@ Client:
 pnpm dev:client
 ```
 
+Paralel:
+
+```bash
+pnpm dev
+```
+
 Varsayılan adresler:
 
 - Client: `http://localhost:5173`

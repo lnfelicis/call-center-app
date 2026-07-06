@@ -41,6 +41,9 @@ export function useAdminPanel() {
   const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm)
   const [userForm, setUserForm] = useState<UserForm>(emptyUserForm)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSessionRestoring, setIsSessionRestoring] = useState(() =>
+    Boolean(localStorage.getItem("call-center-token")),
+  )
   const [message, setMessage] = useState("")
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? roles[0]
@@ -76,6 +79,7 @@ export function useAdminPanel() {
   const loadPanelData = useCallback(
     async (activeToken = token) => {
       if (!activeToken) {
+        setIsSessionRestoring(false)
         return
       }
 
@@ -94,6 +98,7 @@ export function useAdminPanel() {
         const canManageRoles = userPermissions.includes("roles.manage")
         const canManageUsers = userPermissions.includes("users.manage")
         const canManageSettings = userPermissions.includes("settings.manage")
+        const canViewLogs = userPermissions.includes("logs.view")
         const canUseCalls = userPermissions.some((permission) => permission.startsWith("calls."))
         const [permissionData, roleData, userData] = await Promise.all([
           canManageRoles
@@ -137,11 +142,16 @@ export function useAdminPanel() {
             return "dashboard"
           }
 
+          if (current === "logs" && !canViewLogs) {
+            return "dashboard"
+          }
+
           return current
         })
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Veriler yüklenemedi.")
       } finally {
+        setIsSessionRestoring(false)
         setIsLoading(false)
       }
     },
@@ -151,7 +161,10 @@ export function useAdminPanel() {
   useEffect(() => {
     if (token) {
       void loadPanelData(token)
+      return
     }
+
+    setIsSessionRestoring(false)
   }, [loadPanelData, token])
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -304,11 +317,33 @@ export function useAdminPanel() {
     }
   }
 
+  async function updateUser(
+    userId: string,
+    payload: Pick<ManagedUser, "fullName" | "email" | "roleId" | "status">,
+  ) {
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      await request(`/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      })
+      setMessage("Kullanıcı güncellendi.")
+      await loadPanelData()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Kullanıcı güncellenemedi.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return {
     activeModule,
     currentUser,
     isAuthenticated: Boolean(token && currentUser),
     isLoading,
+    isSessionRestoring,
     loginForm,
     message,
     permissions,
@@ -321,6 +356,7 @@ export function useAdminPanel() {
     users,
     createRole,
     createUser,
+    updateUser,
     handleLogin,
     handleLogout,
     loadPanelData,

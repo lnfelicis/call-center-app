@@ -112,14 +112,31 @@ export const schemaStatements = [
   )`,
   `CREATE TABLE IF NOT EXISTS call_form_options (
     id CHAR(36) PRIMARY KEY,
-    option_type ENUM('interaction_type', 'issue_category') NOT NULL,
+    option_type ENUM('interaction_type', 'issue_category', 'issue_sub_category', 'status', 'priority', 'resolution_category') NOT NULL,
     label VARCHAR(140) NOT NULL,
+    value VARCHAR(80) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_call_form_options_type_label (option_type, label),
     INDEX idx_call_form_options_type_active (option_type, is_active)
+  )`,
+  `CREATE TABLE IF NOT EXISTS call_form_fields (
+    field_key VARCHAR(80) PRIMARY KEY,
+    label VARCHAR(140) NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    is_required TINYINT(1) NOT NULL DEFAULT 0,
+    is_visible TINYINT(1) NOT NULL DEFAULT 1,
+    is_editable TINYINT(1) NOT NULL DEFAULT 1,
+    is_masked TINYINT(1) NOT NULL DEFAULT 0,
+    sort_order INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key VARCHAR(80) PRIMARY KEY,
+    setting_value JSON NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id CHAR(36) PRIMARY KEY,
@@ -156,6 +173,40 @@ export const defaultCallFormOptions = [
   { type: "issue_category", label: "Şikayet", sortOrder: 80 },
   { type: "issue_category", label: "Sistem hatası", sortOrder: 90 },
   { type: "issue_category", label: "Diğer", sortOrder: 100 },
+];
+
+export const extendedCallFormOptions = [
+  { type: "status", label: "Açık", value: "open", sortOrder: 10 },
+  { type: "status", label: "İşlemde", value: "in_progress", sortOrder: 20 },
+  { type: "status", label: "Yanıt bekliyor", value: "waiting", sortOrder: 30 },
+  { type: "status", label: "Takip edilecek", value: "follow_up", sortOrder: 40 },
+  { type: "status", label: "Yetkiliye aktarıldı", value: "transferred", sortOrder: 50 },
+  { type: "status", label: "Çözüldü", value: "resolved", sortOrder: 60 },
+  { type: "status", label: "Kapatıldı", value: "closed", sortOrder: 70 },
+  { type: "status", label: "İptal", value: "cancelled", sortOrder: 80 },
+  { type: "status", label: "Mükerrer", value: "duplicate", sortOrder: 90 },
+  { type: "status", label: "Arşiv", value: "archived", sortOrder: 100 },
+  { type: "priority", label: "Düşük", value: "low", sortOrder: 10 },
+  { type: "priority", label: "Normal", value: "normal", sortOrder: 20 },
+  { type: "priority", label: "Yüksek", value: "high", sortOrder: 30 },
+  { type: "priority", label: "Acil", value: "urgent", sortOrder: 40 },
+  { type: "resolution_category", label: "Bilgi verildi", value: "Bilgi verildi", sortOrder: 10 },
+  { type: "resolution_category", label: "İşlem tamamlandı", value: "İşlem tamamlandı", sortOrder: 20 },
+  { type: "resolution_category", label: "Yönlendirme yapıldı", value: "Yönlendirme yapıldı", sortOrder: 30 },
+  { type: "resolution_category", label: "Teknik ekibe aktarıldı", value: "Teknik ekibe aktarıldı", sortOrder: 40 },
+];
+
+export const defaultCallFormFields = [
+  { key: "phoneNumber", label: "Telefon numarası", required: true, masked: true, sortOrder: 10 },
+  { key: "studentTc", label: "Öğrenci TC", required: false, masked: true, sortOrder: 20 },
+  { key: "studentName", label: "Öğrenci adı soyadı", required: false, masked: false, sortOrder: 30 },
+  { key: "interactionType", label: "Görüşme tipi", required: true, masked: false, sortOrder: 40 },
+  { key: "category", label: "Sorun kategorisi", required: true, masked: false, sortOrder: 50 },
+  { key: "issue", label: "Yaşanılan sorun", required: true, masked: false, sortOrder: 60 },
+  { key: "initialNote", label: "İlk personel notu", required: false, masked: false, sortOrder: 70 },
+  { key: "priority", label: "Öncelik", required: true, masked: false, sortOrder: 80 },
+  { key: "needsFollowUp", label: "Takip gerekiyor mu?", required: false, masked: false, sortOrder: 90 },
+  { key: "followUpAt", label: "Takip tarihi", required: false, masked: false, sortOrder: 100 },
 ];
 
 export const permissions = [

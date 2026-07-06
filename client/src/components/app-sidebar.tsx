@@ -2,6 +2,7 @@ import {
   BarChart3,
   ClipboardList,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   RefreshCw,
   Settings,
@@ -79,6 +80,13 @@ const navigation = [
       "calls.reopen",
       "calls.archive",
     ],
+  },
+  {
+    id: "logs",
+    label: "Log Kayıtları",
+    icon: ListChecks,
+    enabled: true,
+    permissions: ["logs.view"],
   },
   {
     id: "reports",

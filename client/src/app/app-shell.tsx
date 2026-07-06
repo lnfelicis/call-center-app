@@ -1,3 +1,5 @@
+import { Loader2 } from "lucide-react";
+
 import { AppSidebar } from "@/components/app-sidebar";
 import { LoginScreen } from "@/components/login-screen";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +10,7 @@ import {
 } from "@/components/ui/sidebar";
 import { CallsModule } from "@/features/calls/calls-module";
 import { DashboardModule } from "@/features/dashboard/dashboard-module";
+import { LogsModule } from "@/features/logs/logs-module";
 import { RolesModule } from "@/features/roles/roles-module";
 import { SettingsModule } from "@/features/settings/settings-module";
 import { UsersModule } from "@/features/users/users-module";
@@ -16,6 +19,10 @@ import type { ModuleId } from "@/types";
 
 export function AppShell() {
   const panel = useAdminPanel();
+
+  if (panel.isSessionRestoring) {
+    return <SessionRestoreScreen />;
+  }
 
   if (!panel.isAuthenticated || !panel.currentUser) {
     return (
@@ -70,6 +77,7 @@ export function AppShell() {
               roleCount={panel.roles.length}
               permissionCount={panel.permissions.length}
               userCount={panel.users.length}
+              request={panel.request}
             />
           )}
 
@@ -81,6 +89,7 @@ export function AppShell() {
               isLoading={panel.isLoading}
               onUserFormChange={panel.setUserForm}
               onCreateUser={panel.createUser}
+              onUpdateUser={(userId, payload) => void panel.updateUser(userId, payload)}
             />
           )}
 
@@ -112,12 +121,27 @@ export function AppShell() {
             />
           )}
 
+          {panel.activeModule === "logs" && (
+            <LogsModule request={panel.request} />
+          )}
+
           {panel.activeModule === "settings" && (
             <SettingsModule request={panel.request} />
           )}
         </main>
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+function SessionRestoreScreen() {
+  return (
+    <main className="grid min-h-svh place-items-center bg-background p-6">
+      <div className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" />
+        Oturum kontrol ediliyor
+      </div>
+    </main>
   );
 }
 
@@ -132,6 +156,10 @@ function getModuleTitle(moduleId: ModuleId) {
 
   if (moduleId === "calls") {
     return "Çağrı Kayıtları";
+  }
+
+  if (moduleId === "logs") {
+    return "Log Kayıtları";
   }
 
   if (moduleId === "settings") {

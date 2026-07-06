@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { CallFormOption, CallOptionType, RequestFn } from "@/types"
+import type { CallFormFieldSetting, CallFormOption, CallOptionType, RequestFn } from "@/types"
 
 type SettingsModuleProps = {
   request: RequestFn
@@ -36,13 +36,19 @@ type DragState = {
 const optionTypeLabels: Record<CallOptionType, string> = {
   interaction_type: "Görüşme Tipleri",
   issue_category: "Sorun Kategorileri",
+  issue_sub_category: "Alt Sorun Kategorileri",
+  status: "Durum Seçenekleri",
+  priority: "Öncelik Seçenekleri",
+  resolution_category: "Çözüm Kategorileri",
 }
 
 export function SettingsModule({ request }: SettingsModuleProps) {
   const [options, setOptions] = useState<CallFormOption[]>([])
+  const [fields, setFields] = useState<CallFormFieldSetting[]>([])
   const [form, setForm] = useState({
     type: "interaction_type" as CallOptionType,
     label: "",
+    value: "",
     sortOrder: 0,
   })
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -126,8 +132,9 @@ export function SettingsModule({ request }: SettingsModuleProps) {
     setMessage("")
 
     try {
-      const data = await request<{ options: CallFormOption[] }>("/call-options")
+      const data = await request<{ options: CallFormOption[]; fields: CallFormFieldSetting[] }>("/settings")
       setOptions(data.options)
+      setFields(data.fields)
       setHasChanges(false)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Seçenekler yüklenemedi.")
@@ -146,11 +153,15 @@ export function SettingsModule({ request }: SettingsModuleProps) {
     setMessage("")
 
     try {
-      await request("/call-options", {
+      await request(`/settings/options/${form.type}`, {
         method: "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          label: form.label,
+          value: form.value || form.label,
+          sortOrder: form.sortOrder,
+        }),
       })
-      setForm((current) => ({ ...current, label: "", sortOrder: current.sortOrder + 10 }))
+      setForm((current) => ({ ...current, label: "", value: "", sortOrder: current.sortOrder + 10 }))
       setMessage("Seçenek eklendi.")
       await loadOptions()
     } catch (error) {
@@ -165,9 +176,9 @@ export function SettingsModule({ request }: SettingsModuleProps) {
     setMessage("")
 
     try {
-      await request("/call-options", {
+      await request("/settings", {
         method: "PATCH",
-        body: JSON.stringify({ options }),
+        body: JSON.stringify({ options, fields }),
       })
       setMessage("Tüm seçenekler kaydedildi.")
       await loadOptions()
@@ -181,6 +192,13 @@ export function SettingsModule({ request }: SettingsModuleProps) {
   function patchLocalOption(optionId: string, patch: Partial<CallFormOption>) {
     setOptions((current) =>
       current.map((option) => (option.id === optionId ? { ...option, ...patch } : option)),
+    )
+    setHasChanges(true)
+  }
+
+  function patchLocalField(fieldKey: string, patch: Partial<CallFormFieldSetting>) {
+    setFields((current) =>
+      current.map((field) => (field.key === fieldKey ? { ...field, ...patch } : field)),
     )
     setHasChanges(true)
   }
@@ -345,7 +363,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-3 lg:grid-cols-[minmax(190px,0.8fr)_minmax(260px,1.2fr)_auto_auto] lg:items-end" onSubmit={createOption}>
+          <form className="grid gap-3 lg:grid-cols-[minmax(190px,0.8fr)_minmax(220px,1fr)_minmax(180px,0.8fr)_auto_auto] lg:items-end" onSubmit={createOption}>
             <div className="grid gap-2">
               <Label>Seçenek türü</Label>
               <Select
@@ -360,6 +378,10 @@ export function SettingsModule({ request }: SettingsModuleProps) {
                 <SelectContent>
                   <SelectItem value="interaction_type">Görüşme tipi</SelectItem>
                   <SelectItem value="issue_category">Sorun kategorisi</SelectItem>
+                  <SelectItem value="issue_sub_category">Alt sorun kategorisi</SelectItem>
+                  <SelectItem value="status">Durum</SelectItem>
+                  <SelectItem value="priority">Öncelik</SelectItem>
+                  <SelectItem value="resolution_category">Çözüm kategorisi</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -371,6 +393,14 @@ export function SettingsModule({ request }: SettingsModuleProps) {
                 placeholder="Örn. Telefon dönüşü"
               />
             </div>
+            <div className="grid gap-2">
+              <Label>Sistem değeri</Label>
+              <Input
+                value={form.value}
+                onChange={(event) => setForm((current) => ({ ...current, value: event.target.value }))}
+                placeholder="Boşsa ad kullanılır"
+              />
+            </div>
             <Button type="submit" disabled={isLoading || form.label.trim().length < 2}>
               <Plus />
               Ekle
@@ -380,6 +410,40 @@ export function SettingsModule({ request }: SettingsModuleProps) {
               Tümünü Kaydet
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Form Alanları</CardTitle>
+          <CardDescription>
+            Alanların aktiflik, zorunluluk, görünürlük, düzenlenebilirlik ve maskeleme davranışlarını yönetin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2">
+            {fields
+              .sort((first, second) => first.sortOrder - second.sortOrder)
+              .map((field) => (
+                <div
+                  key={field.key}
+                  className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[minmax(180px,1fr)_repeat(5,auto)] lg:items-center"
+                >
+                  <div className="grid gap-1">
+                    <Input
+                      value={field.label}
+                      onChange={(event) => patchLocalField(field.key, { label: event.target.value })}
+                    />
+                    <span className="text-xs text-muted-foreground">{field.key}</span>
+                  </div>
+                  <Flag label="Aktif" checked={field.isActive} onChange={(isActive) => patchLocalField(field.key, { isActive })} />
+                  <Flag label="Görünür" checked={field.isVisible} onChange={(isVisible) => patchLocalField(field.key, { isVisible })} />
+                  <Flag label="Zorunlu" checked={field.isRequired} onChange={(isRequired) => patchLocalField(field.key, { isRequired })} />
+                  <Flag label="Düzenlenebilir" checked={field.isEditable} onChange={(isEditable) => patchLocalField(field.key, { isEditable })} />
+                  <Flag label="Maskeli" checked={field.isMasked} onChange={(isMasked) => patchLocalField(field.key, { isMasked })} />
+                </div>
+              ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -437,5 +501,22 @@ export function SettingsModule({ request }: SettingsModuleProps) {
         ))}
       </div>
     </div>
+  )
+}
+
+function Flag({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm font-medium">
+      <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+      {label}
+    </label>
   )
 }

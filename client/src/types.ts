@@ -51,7 +51,7 @@ export type UserForm = {
   roleId: string
 }
 
-export type ModuleId = "dashboard" | "users" | "roles" | "calls" | "settings"
+export type ModuleId = "dashboard" | "users" | "roles" | "calls" | "logs" | "settings"
 
 export type RequestFn = <T>(path: string, options?: RequestInit) => Promise<T>
 
@@ -144,12 +144,70 @@ export type UserOption = {
   username: string
 }
 
-export type CallOptionType = "interaction_type" | "issue_category"
+export type CallOptionType =
+  | "interaction_type"
+  | "issue_category"
+  | "issue_sub_category"
+  | "status"
+  | "priority"
+  | "resolution_category"
 
 export type CallFormOption = {
   id: string
   type: CallOptionType
   label: string
+  value: string
   isActive: boolean
   sortOrder: number
+}
+
+export type CallFormFieldSetting = {
+  key: keyof CallForm | "needsFollowUp"
+  label: string
+  isActive: boolean
+  isRequired: boolean
+  isVisible: boolean
+  isEditable: boolean
+  isMasked: boolean
+  sortOrder: number
+}
+
+export type AuditLog = {
+  id: string
+  actorUserId: string | null
+  actorUsername: string | null
+  action: string
+  entityType: string
+  entityId: string | null
+  metadata: unknown
+  ipAddress: string | null
+  userAgent: string | null
+  createdAt: string
+}
+
+export type AdminDashboard = {
+  metrics: {
+    totalCalls: number
+    openCalls: number
+    followUpCalls: number
+    totalUsers: number
+    activeRoles: number
+  }
+  callsByStatus: Array<{ status: string; total: number }>
+  recentCalls: Array<{
+    id: string
+    recordNumber: string
+    status: string
+    priority: string
+    openedByName: string
+    resolvedAt: string | null
+    createdAt: string
+  }>
+  recentLogs: Array<{
+    id: string
+    actorUsername: string | null
+    action: string
+    entityType: string
+    createdAt: string
+  }>
 }

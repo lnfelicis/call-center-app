@@ -2,7 +2,13 @@ import mysql from "mysql2/promise";
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
-import { defaultCallFormOptions, permissions, schemaStatements } from "./schema.js";
+import {
+  defaultCallFormFields,
+  defaultCallFormOptions,
+  extendedCallFormOptions,
+  permissions,
+  schemaStatements,
+} from "./schema.js";
 import { hashPassword } from "./security.js";
 
 const superAdminRoleId = "00000000-0000-4000-8000-000000000001";
@@ -33,6 +39,21 @@ async function ensureDatabaseExists() {
 async function runSchema() {
   for (const statement of schemaStatements) {
     await db.query(statement);
+  }
+
+  await db.query(
+    `ALTER TABLE call_form_options
+    MODIFY option_type ENUM('interaction_type', 'issue_category', 'issue_sub_category', 'status', 'priority', 'resolution_category') NOT NULL`,
+  );
+
+  try {
+    await db.query("ALTER TABLE call_form_options ADD COLUMN value VARCHAR(80) NULL AFTER label");
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+
+    if (code !== "ER_DUP_FIELDNAME") {
+      throw error;
+    }
   }
 }
 
@@ -73,14 +94,29 @@ async function seedSuperAdminRole() {
 }
 
 async function seedCallFormOptions() {
-  for (const option of defaultCallFormOptions) {
+  for (const option of [...defaultCallFormOptions, ...extendedCallFormOptions]) {
     await db.query(
-      `INSERT INTO call_form_options (id, option_type, label, is_active, sort_order)
-      VALUES (UUID(), ?, ?, 1, ?)
+      `INSERT INTO call_form_options (id, option_type, label, value, is_active, sort_order)
+      VALUES (UUID(), ?, ?, ?, 1, ?)
       ON DUPLICATE KEY UPDATE
+        value = VALUES(value),
         is_active = 1,
         sort_order = VALUES(sort_order)`,
-      [option.type, option.label, option.sortOrder],
+      [option.type, option.label, "value" in option ? option.value : option.label, option.sortOrder],
+    );
+  }
+}
+
+async function seedCallFormFields() {
+  for (const field of defaultCallFormFields) {
+    await db.query(
+      `INSERT INTO call_form_fields
+        (field_key, label, is_active, is_required, is_visible, is_editable, is_masked, sort_order)
+      VALUES (?, ?, 1, ?, 1, 1, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        label = VALUES(label),
+        sort_order = VALUES(sort_order)`,
+      [field.key, field.label, field.required ? 1 : 0, field.masked ? 1 : 0, field.sortOrder],
     );
   }
 }
@@ -130,6 +166,7 @@ async function main() {
   await runSchema();
   await seedPermissions();
   await seedCallFormOptions();
+  await seedCallFormFields();
   await seedSuperAdminRole();
   const admin = await seedSuperAdminUser();
 

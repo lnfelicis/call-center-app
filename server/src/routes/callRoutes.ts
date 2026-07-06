@@ -69,11 +69,31 @@ type UserOptionRow = RowDataPacket & {
 
 type CallOptionRow = RowDataPacket & {
   id: string;
-  option_type: "interaction_type" | "issue_category";
+  option_type: CallOptionType;
   label: string;
+  value: string | null;
   is_active: 0 | 1;
   sort_order: number;
 };
+
+type CallFormFieldRow = RowDataPacket & {
+  field_key: string;
+  label: string;
+  is_active: 0 | 1;
+  is_required: 0 | 1;
+  is_visible: 0 | 1;
+  is_editable: 0 | 1;
+  is_masked: 0 | 1;
+  sort_order: number;
+};
+
+type CallOptionType =
+  | "interaction_type"
+  | "issue_category"
+  | "issue_sub_category"
+  | "status"
+  | "priority"
+  | "resolution_category";
 
 type CallPriority = "low" | "normal" | "high" | "urgent";
 type CallStatus =
@@ -102,7 +122,14 @@ const editableStatuses: CallStatus[] = [
 
 const allowedPriorities = ["low", "normal", "high", "urgent"] satisfies CallPriority[];
 const allowedNoteTypes = ["personnel", "follow_up", "assigned_personnel", "internal", "manager"];
-const allowedOptionTypes = ["interaction_type", "issue_category"];
+const allowedOptionTypes = [
+  "interaction_type",
+  "issue_category",
+  "issue_sub_category",
+  "status",
+  "priority",
+  "resolution_category",
+];
 
 export const callRoutes = Router();
 
@@ -113,7 +140,21 @@ function serializeOption(row: CallOptionRow) {
     id: row.id,
     type: row.option_type,
     label: row.label,
+    value: row.value ?? row.label,
     isActive: row.is_active === 1,
+    sortOrder: row.sort_order,
+  };
+}
+
+function serializeField(row: CallFormFieldRow) {
+  return {
+    key: row.field_key,
+    label: row.label,
+    isActive: row.is_active === 1,
+    isRequired: row.is_required === 1,
+    isVisible: row.is_visible === 1,
+    isEditable: row.is_editable === 1,
+    isMasked: row.is_masked === 1,
     sortOrder: row.sort_order,
   };
 }
@@ -150,14 +191,56 @@ function canViewCall(req: AuthenticatedRequest, call: CallRow) {
   return call.assigned_to_user_id === req.user?.id;
 }
 
-function serializeCall(req: AuthenticatedRequest, call: CallRow) {
+async function getFieldSettings() {
+  const [rows] = await db.query<CallFormFieldRow[]>(
+    `SELECT field_key, label, is_active, is_required, is_visible, is_editable, is_masked, sort_order
+    FROM call_form_fields
+    ORDER BY sort_order ASC, field_key ASC`,
+  );
+
+  return rows;
+}
+
+function getFieldSetting(fields: CallFormFieldRow[], key: string) {
+  return fields.find((field) => field.field_key === key);
+}
+
+function fieldRequiresValue(fields: CallFormFieldRow[], key: string) {
+  const field = getFieldSetting(fields, key);
+
+  if (!field) {
+    return false;
+  }
+
+  return field.is_active === 1 && field.is_visible === 1 && field.is_required === 1;
+}
+
+function fieldAllowsEdit(fields: CallFormFieldRow[], key: string) {
+  const field = getFieldSetting(fields, key);
+
+  if (!field) {
+    return true;
+  }
+
+  return field.is_active === 1 && field.is_visible === 1 && field.is_editable === 1;
+}
+
+function shouldMaskField(req: AuthenticatedRequest, fields: CallFormFieldRow[], key: string) {
+  const field = getFieldSetting(fields, key);
+
+  return field?.is_masked === 1 && !hasPermission(req, "sensitive.view_unmasked");
+}
+
+function serializeCall(req: AuthenticatedRequest, call: CallRow, fields: CallFormFieldRow[] = []) {
   const canViewSensitive = hasPermission(req, "sensitive.view_unmasked");
+  const maskPhoneNumber = !canViewSensitive && shouldMaskField(req, fields, "phoneNumber");
+  const maskStudentTc = !canViewSensitive && shouldMaskField(req, fields, "studentTc");
 
   return {
     id: call.id,
     recordNumber: call.record_number,
-    phoneNumber: canViewSensitive ? call.phone_number : maskPhone(call.phone_number),
-    studentTc: canViewSensitive ? call.student_tc : maskTc(call.student_tc),
+    phoneNumber: maskPhoneNumber ? maskPhone(call.phone_number) : call.phone_number,
+    studentTc: maskStudentTc ? maskTc(call.student_tc) : call.student_tc,
     studentName: call.student_name,
     interactionType: call.interaction_type,
     category: call.category,
@@ -208,6 +291,20 @@ function normalizePriority(value: unknown): CallPriority {
 
 function normalizeBoolean(value: unknown) {
   return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function isValidTurkishIdentityNumber(value: string) {
+  if (!/^[1-9]\d{10}$/.test(value)) {
+    return false;
+  }
+
+  const digits = value.split("").map(Number);
+  const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
+  const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
+  const tenthDigit = ((oddSum * 7 - evenSum) % 10 + 10) % 10;
+  const eleventhDigit = digits.slice(0, 10).reduce((sum, digit) => sum + digit, 0) % 10;
+
+  return digits[9] === tenthDigit && digits[10] === eleventhDigit;
 }
 
 async function getCallById(callId: string) {
@@ -262,21 +359,23 @@ async function ensureCanViewCall(req: AuthenticatedRequest, callId: string, res:
 
 callRoutes.get(
   "/call-options",
-  requireAnyPermission(["calls.create", "settings.manage"]),
+  requireAnyPermission(["calls.create", "calls.edit", "calls.resolve", "settings.manage"]),
   async (_req, res) => {
     const [rows] = await db.query<CallOptionRow[]>(
-      `SELECT id, option_type, label, is_active, sort_order
+      `SELECT id, option_type, label, value, is_active, sort_order
       FROM call_form_options
       ORDER BY option_type ASC, sort_order ASC, label ASC`,
     );
+    const fields = await getFieldSettings();
 
-    res.json({ options: rows.map(serializeOption) });
+    res.json({ options: rows.map(serializeOption), fields: fields.map(serializeField) });
   },
 );
 
 callRoutes.post("/call-options", requirePermission("settings.manage"), async (req, res) => {
   const type = String(req.body.type ?? "");
   const label = normalizeRequiredString(req.body.label);
+  const value = normalizeOptionalString(req.body.value) ?? label;
   const sortOrder = Number(req.body.sortOrder) || 0;
 
   if (!allowedOptionTypes.includes(type)) {
@@ -290,15 +389,15 @@ callRoutes.post("/call-options", requirePermission("settings.manage"), async (re
   }
 
   await db.query(
-    `INSERT INTO call_form_options (id, option_type, label, is_active, sort_order)
-    VALUES (?, ?, ?, 1, ?)`,
-    [randomUUID(), type, label, sortOrder],
+    `INSERT INTO call_form_options (id, option_type, label, value, is_active, sort_order)
+    VALUES (?, ?, ?, ?, 1, ?)`,
+    [randomUUID(), type, label, value, sortOrder],
   );
   await writeAuditLog({
     req,
     action: "call_option.create",
     entityType: "call_form_option",
-    metadata: { type, label },
+    metadata: { type, label, value },
   });
 
   res.status(201).json({ ok: true });
@@ -314,6 +413,7 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
 
   for (const option of options) {
     const label = normalizeRequiredString(option.label);
+    const value = normalizeOptionalString(option.value) ?? label;
     const type = String(option.type ?? "");
 
     if (!option.id || !allowedOptionTypes.includes(type) || label.length < 2) {
@@ -328,12 +428,16 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
     await connection.beginTransaction();
 
     for (const option of options) {
+      const label = normalizeRequiredString(option.label);
+      const value = normalizeOptionalString(option.value) ?? label;
+
       await connection.query(
         `UPDATE call_form_options
-        SET label = ?, is_active = ?, sort_order = ?
+        SET label = ?, value = ?, is_active = ?, sort_order = ?
         WHERE id = ? AND option_type = ?`,
         [
-          normalizeRequiredString(option.label),
+          label,
+          value,
           Boolean(option.isActive) ? 1 : 0,
           Number(option.sortOrder) || 0,
           String(option.id),
@@ -363,6 +467,7 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
 callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), async (req, res) => {
   const optionId = String(req.params.id ?? "");
   const label = normalizeRequiredString(req.body.label);
+  const value = normalizeOptionalString(req.body.value) ?? label;
   const isActive = Boolean(req.body.isActive);
   const sortOrder = Number(req.body.sortOrder) || 0;
 
@@ -373,9 +478,9 @@ callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), asyn
 
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE call_form_options
-    SET label = ?, is_active = ?, sort_order = ?
+    SET label = ?, value = ?, is_active = ?, sort_order = ?
     WHERE id = ?`,
-    [label, isActive ? 1 : 0, sortOrder, optionId],
+    [label, value, isActive ? 1 : 0, sortOrder, optionId],
   );
 
   if (result.affectedRows === 0) {
@@ -388,7 +493,7 @@ callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), asyn
     action: "call_option.update",
     entityType: "call_form_option",
     entityId: optionId,
-    metadata: { label, isActive, sortOrder },
+    metadata: { label, value, isActive, sortOrder },
   });
 
   res.json({ ok: true });
@@ -452,7 +557,9 @@ callRoutes.get(
       params,
     );
 
-    res.json({ calls: rows.map((call) => serializeCall(req, call)) });
+    const fields = await getFieldSettings();
+
+    res.json({ calls: rows.map((call) => serializeCall(req, call, fields)) });
   },
 );
 
@@ -467,6 +574,20 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
   const priority = normalizePriority(req.body.priority);
   const needsFollowUp = normalizeBoolean(req.body.needsFollowUp);
   const followUpAt = needsFollowUp ? normalizeRequiredString(req.body.followUpAt) : null;
+  const fields = await getFieldSettings();
+
+  if (
+    (fieldRequiresValue(fields, "phoneNumber") && !phoneNumber) ||
+    (fieldRequiresValue(fields, "studentTc") && !studentTc) ||
+    (fieldRequiresValue(fields, "studentName") && !studentName) ||
+    (fieldRequiresValue(fields, "interactionType") && !interactionType) ||
+    (fieldRequiresValue(fields, "category") && !category) ||
+    (fieldRequiresValue(fields, "issue") && !issue) ||
+    (fieldRequiresValue(fields, "initialNote") && !initialNote)
+  ) {
+    res.status(400).json({ message: "Zorunlu çağrı formu alanları boş bırakılamaz." });
+    return;
+  }
 
   if (!phoneNumber || !interactionType || !category || !issue) {
     res.status(400).json({ message: "Telefon, görüşme tipi, kategori ve yaşanılan sorun zorunludur." });
@@ -478,8 +599,8 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
     return;
   }
 
-  if (studentTc && !/^\d{11}$/.test(studentTc)) {
-    res.status(400).json({ message: "Öğrenci TC alanı 11 haneli olmalıdır." });
+  if (studentTc && !isValidTurkishIdentityNumber(studentTc)) {
+    res.status(400).json({ message: "Geçerli bir TC Kimlik No girin." });
     return;
   }
 
@@ -557,7 +678,7 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
   const call = await getCallById(callId);
 
   res.status(201).json({
-    call: call ? serializeCall(req, call) : null,
+    call: call ? serializeCall(req, call, fields) : null,
     warnings,
   });
 });
@@ -586,8 +707,10 @@ callRoutes.get("/calls/:id", async (req: AuthenticatedRequest, res) => {
     [call.id],
   );
 
+  const fields = await getFieldSettings();
+
   res.json({
-    call: serializeCall(req, call),
+    call: serializeCall(req, call, fields),
     notes: notes.map((note) => ({
       id: note.id,
       callId: note.call_id,
@@ -608,6 +731,132 @@ callRoutes.get("/calls/:id", async (req: AuthenticatedRequest, res) => {
       createdAt: event.created_at,
     })),
   });
+});
+
+callRoutes.patch("/calls/:id", requirePermission("calls.edit"), async (req: AuthenticatedRequest, res) => {
+  const call = await ensureCanViewCall(req, String(req.params.id ?? ""), res);
+
+  if (!call) {
+    return;
+  }
+
+  if (call.is_locked === 1) {
+    res.status(400).json({ message: "Kilitli kayıt düzenlenemez." });
+    return;
+  }
+
+  const fields = await getFieldSettings();
+  const editableValue = (fieldKey: string, value: unknown, fallback: string | null) =>
+    fieldAllowsEdit(fields, fieldKey) && Object.hasOwn(req.body, fieldKey) ? normalizeOptionalString(value) : fallback;
+
+  const phoneNumber = editableValue("phoneNumber", req.body.phoneNumber, call.phone_number);
+  const studentTc = editableValue("studentTc", req.body.studentTc, call.student_tc);
+  const studentName = editableValue("studentName", req.body.studentName, call.student_name);
+  const interactionType = editableValue("interactionType", req.body.interactionType, call.interaction_type);
+  const category = editableValue("category", req.body.category, call.category);
+  const issue = editableValue("issue", req.body.issue, call.issue);
+  const initialNote = editableValue("initialNote", req.body.initialNote, call.initial_note);
+  const priority =
+    fieldAllowsEdit(fields, "priority") && Object.hasOwn(req.body, "priority")
+      ? normalizePriority(req.body.priority)
+      : call.priority;
+  const needsFollowUp = fieldAllowsEdit(fields, "needsFollowUp") && Object.hasOwn(req.body, "needsFollowUp")
+    ? normalizeBoolean(req.body.needsFollowUp)
+    : call.needs_follow_up === 1;
+  const followUpAt = fieldAllowsEdit(fields, "followUpAt") && Object.hasOwn(req.body, "followUpAt")
+    ? needsFollowUp
+      ? normalizeRequiredString(req.body.followUpAt)
+      : null
+    : call.follow_up_at;
+
+  if (
+    (fieldRequiresValue(fields, "phoneNumber") && !phoneNumber) ||
+    (fieldRequiresValue(fields, "studentTc") && !studentTc) ||
+    (fieldRequiresValue(fields, "studentName") && !studentName) ||
+    (fieldRequiresValue(fields, "interactionType") && !interactionType) ||
+    (fieldRequiresValue(fields, "category") && !category) ||
+    (fieldRequiresValue(fields, "issue") && !issue) ||
+    (fieldRequiresValue(fields, "initialNote") && !initialNote)
+  ) {
+    res.status(400).json({ message: "Zorunlu çağrı alanları boş bırakılamaz." });
+    return;
+  }
+
+  if (!phoneNumber || !interactionType || !category || !issue) {
+    res.status(400).json({ message: "Telefon, görüşme tipi, kategori ve yaşanılan sorun sistem için zorunludur." });
+    return;
+  }
+
+  if (!/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
+    res.status(400).json({ message: "Telefon numarası formatı geçerli değil." });
+    return;
+  }
+
+  if (studentTc && !isValidTurkishIdentityNumber(studentTc)) {
+    res.status(400).json({ message: "Geçerli bir TC Kimlik No girin." });
+    return;
+  }
+
+  if (needsFollowUp && !followUpAt) {
+    res.status(400).json({ message: "Takip gerekiyorsa takip tarihi zorunludur." });
+    return;
+  }
+
+  await db.query(
+    `UPDATE call_records
+    SET phone_number = ?,
+      student_tc = ?,
+      student_name = ?,
+      interaction_type = ?,
+      category = ?,
+      issue = ?,
+      initial_note = ?,
+      priority = ?,
+      needs_follow_up = ?,
+      follow_up_at = ?
+    WHERE id = ?`,
+    [
+      phoneNumber,
+      studentTc,
+      studentName,
+      interactionType,
+      category,
+      issue,
+      initialNote,
+      priority,
+      needsFollowUp ? 1 : 0,
+      followUpAt,
+      call.id,
+    ],
+  );
+
+  const updatedFields = [
+    call.phone_number !== phoneNumber ? "phoneNumber" : null,
+    call.student_tc !== studentTc ? "studentTc" : null,
+    call.student_name !== studentName ? "studentName" : null,
+    call.interaction_type !== interactionType ? "interactionType" : null,
+    call.category !== category ? "category" : null,
+    call.issue !== issue ? "issue" : null,
+    call.initial_note !== initialNote ? "initialNote" : null,
+    call.priority !== priority ? "priority" : null,
+    (call.needs_follow_up === 1) !== needsFollowUp ? "needsFollowUp" : null,
+    call.follow_up_at !== followUpAt ? "followUpAt" : null,
+  ].filter(Boolean);
+
+  await writeCallEvent(req, call.id, "call.updated", "Çağrı kaydı bilgileri güncellendi.", {
+    updatedFields,
+  });
+  await writeAuditLog({
+    req,
+    action: "call.update",
+    entityType: "call",
+    entityId: call.id,
+    metadata: { recordNumber: call.record_number, updatedFields },
+  });
+
+  const updatedCall = await getCallById(call.id);
+
+  res.json({ call: updatedCall ? serializeCall(req, updatedCall, fields) : null });
 });
 
 callRoutes.post("/calls/:id/notes", async (req: AuthenticatedRequest, res) => {

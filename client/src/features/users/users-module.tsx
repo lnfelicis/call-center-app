@@ -1,5 +1,6 @@
+import { useState } from "react"
 import type { FormEvent, ReactNode } from "react"
-import { Check, UserPlus, X } from "lucide-react"
+import { Check, Pencil, UserPlus, X } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -30,6 +38,10 @@ type UsersModuleProps = {
   isLoading: boolean
   onUserFormChange: (form: UserForm) => void
   onCreateUser: (event: FormEvent<HTMLFormElement>) => void
+  onUpdateUser: (
+    userId: string,
+    payload: Pick<ManagedUser, "fullName" | "email" | "roleId" | "status">,
+  ) => void
 }
 
 export function UsersModule({
@@ -39,7 +51,9 @@ export function UsersModule({
   isLoading,
   onUserFormChange,
   onCreateUser,
+  onUpdateUser,
 }: UsersModuleProps) {
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null)
   const passwordIsValid = isPasswordValid(userForm.password)
   const userCanBeCreated =
     userForm.username.trim() &&
@@ -170,12 +184,116 @@ export function UsersModule({
                   <Badge variant={user.status === "active" ? "secondary" : "outline"}>
                     {user.status === "active" ? "Aktif" : "Pasif"}
                   </Badge>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setEditingUser(user)}>
+                    <Pencil />
+                    Düzenle
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Kullanıcıyı düzenle</DialogTitle>
+          </DialogHeader>
+          {editingUser && (
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onUpdateUser(editingUser.id, {
+                  fullName: editingUser.fullName,
+                  email: editingUser.email,
+                  roleId: editingUser.roleId,
+                  status: editingUser.status,
+                })
+                setEditingUser(null)
+              }}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Ad soyad" htmlFor="edit-full-name">
+                  <Input
+                    id="edit-full-name"
+                    value={editingUser.fullName}
+                    onChange={(event) =>
+                      setEditingUser((current) =>
+                        current ? { ...current, fullName: event.target.value } : current,
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="E-posta" htmlFor="edit-email">
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={editingUser.email}
+                    onChange={(event) =>
+                      setEditingUser((current) =>
+                        current ? { ...current, email: event.target.value } : current,
+                      )
+                    }
+                  />
+                </Field>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label>Rol</Label>
+                  <Select
+                    value={editingUser.roleId}
+                    onValueChange={(roleId) =>
+                      setEditingUser((current) => (current ? { ...current, roleId } : current))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Durum</Label>
+                  <Select
+                    value={editingUser.status}
+                    onValueChange={(status) =>
+                      setEditingUser((current) =>
+                        current
+                          ? { ...current, status: status === "passive" ? "passive" : "active" }
+                          : current,
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Aktif</SelectItem>
+                      <SelectItem value="passive">Pasif</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+                  Vazgeç
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  Kaydet
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,8 +1,16 @@
-import { Loader2 } from "lucide-react";
+import { Check, Loader2, Monitor, Moon, Sun } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { LoginScreen } from "@/components/login-screen";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarInset,
   SidebarProvider,
@@ -17,10 +25,22 @@ import { RolesModule } from "@/features/roles/roles-module";
 import { SettingsModule } from "@/features/settings/settings-module";
 import { UsersModule } from "@/features/users/users-module";
 import { useAdminPanel } from "@/hooks/use-admin-panel";
-import type { ModuleId } from "@/types";
+import { useTheme } from "@/hooks/use-theme";
+import type { ModuleId, ThemeMode } from "@/types";
+
+const themeOptions: Array<{
+  mode: ThemeMode;
+  label: string;
+  icon: typeof Monitor;
+}> = [
+  { mode: "system", label: "Sistem", icon: Monitor },
+  { mode: "light", label: "Açık", icon: Sun },
+  { mode: "dark", label: "Koyu", icon: Moon },
+];
 
 export function AppShell() {
   const panel = useAdminPanel();
+  const theme = useTheme();
 
   if (panel.isSessionRestoring) {
     return <SessionRestoreScreen />;
@@ -70,6 +90,10 @@ export function AppShell() {
               {panel.message}
             </Badge>
           )}
+          <ThemeSwitcher
+            themeMode={theme.themeMode}
+            onThemeModeChange={theme.setThemeMode}
+          />
         </header>
 
         <main className="min-w-0 p-4 md:p-7">
@@ -146,6 +170,51 @@ export function AppShell() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+function ThemeSwitcher({
+  themeMode,
+  onThemeModeChange,
+}: {
+  themeMode: ThemeMode;
+  onThemeModeChange: (themeMode: ThemeMode) => void;
+}) {
+  const activeTheme = themeOptions.find((option) => option.mode === themeMode) ?? themeOptions[0];
+  const ActiveIcon = activeTheme.icon;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={`Tema: ${activeTheme.label}`}
+          title={`Tema: ${activeTheme.label}`}
+        >
+          <ActiveIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Tema</DropdownMenuLabel>
+        {themeOptions.map((option) => {
+          const Icon = option.icon;
+          const isActive = option.mode === themeMode;
+
+          return (
+            <DropdownMenuItem
+              key={option.mode}
+              onClick={() => onThemeModeChange(option.mode)}
+            >
+              <Icon />
+              <span>{option.label}</span>
+              {isActive && <Check className="ml-auto" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

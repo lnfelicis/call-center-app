@@ -63,6 +63,8 @@ export type ModuleId =
 
 export type RequestFn = <T>(path: string, options?: RequestInit) => Promise<T>
 
+export type ThemeMode = "light" | "dark" | "system"
+
 export type CallPriority = string
 
 export type CallStatus =

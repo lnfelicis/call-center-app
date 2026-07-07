@@ -1083,9 +1083,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
       </Card>
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent
-          className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-5xl"
-        >
+        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {selectedCall?.recordNumber ?? "Çağrı Detayı"}
@@ -1638,9 +1636,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
       </Dialog>
 
       <Dialog open={isCreateOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent
-          className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-3xl"
-        >
+        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Yeni Çağrı Kaydı</DialogTitle>
             <DialogDescription>
@@ -1931,7 +1927,7 @@ function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border p-3">
       <span className="block text-xs text-muted-foreground">{label}</span>
-      <strong className="mt-1 block break-words text-sm font-medium">
+      <strong className="mt-1 block wrap-break-word text-sm font-medium">
         {value}
       </strong>
     </div>

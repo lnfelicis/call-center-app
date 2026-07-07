@@ -41,6 +41,8 @@ type DataTableProps<T> = {
   getRowId: (row: T) => string
   emptyText: string
   searchPlaceholder?: string
+  onRowClick?: (row: T) => void
+  getRowClassName?: (row: T) => string | undefined
 }
 
 export function DataTable<T>({
@@ -49,6 +51,8 @@ export function DataTable<T>({
   getRowId,
   emptyText,
   searchPlaceholder = "Ara...",
+  onRowClick,
+  getRowClassName,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("")
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([])
@@ -207,7 +211,11 @@ export function DataTable<T>({
           </TableHeader>
           <TableBody>
             {filteredData.map((row) => (
-              <TableRow key={getRowId(row)}>
+              <TableRow
+                key={getRowId(row)}
+                className={cn(onRowClick && "cursor-pointer", getRowClassName?.(row))}
+                onClick={() => onRowClick?.(row)}
+              >
                 {visibleColumns.map((column) => (
                   <TableCell
                     key={column.id}

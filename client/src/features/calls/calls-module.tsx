@@ -5,13 +5,14 @@ import {
   ClipboardList,
   FileText,
   MessageSquarePlus,
-  Pencil,
   Phone,
   Plus,
   RefreshCw,
   RotateCcw,
 } from "lucide-react"
 
+import { DataTable } from "@/components/data-table"
+import type { DataTableColumn } from "@/components/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import type {
   AuthUser,
@@ -60,6 +62,12 @@ type CallsModuleProps = {
 
 type CallFormKey = keyof CallForm
 type CallFormErrors = Partial<Record<CallFormKey, string>>
+type CallListFilters = {
+  status: string
+  priority: string
+  category: string
+  followUp: "all" | "needed" | "none"
+}
 
 const emptyCallForm: CallForm = {
   phoneNumber: "",
@@ -116,7 +124,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     resolutionDescription: "",
   })
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [createError, setCreateError] = useState("")
   const [editError, setEditError] = useState("")
   const [createFieldErrors, setCreateFieldErrors] = useState<CallFormErrors>({})
@@ -124,6 +132,12 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   const [callMatches, setCallMatches] = useState<CallMatches>({ phoneMatches: [], tcMatches: [] })
   const [isLoadingMatches, setIsLoadingMatches] = useState(false)
   const [activeScope, setActiveScope] = useState<"own" | "all">("own")
+  const [listFilters, setListFilters] = useState<CallListFilters>({
+    status: "all",
+    priority: "all",
+    category: "all",
+    followUp: "all",
+  })
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
@@ -188,6 +202,131 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
 
     return fieldIsVisible(key) && Boolean(field?.isEditable ?? true) && canViewMaskedValue
   }
+
+  const filteredCalls = useMemo(() => {
+    return visibleCalls.filter((call) => {
+      if (listFilters.status !== "all" && call.status !== listFilters.status) {
+        return false
+      }
+
+      if (listFilters.priority !== "all" && call.priority !== listFilters.priority) {
+        return false
+      }
+
+      if (listFilters.category !== "all" && call.category !== listFilters.category) {
+        return false
+      }
+
+      if (listFilters.followUp === "needed" && !call.needsFollowUp) {
+        return false
+      }
+
+      if (listFilters.followUp === "none" && call.needsFollowUp) {
+        return false
+      }
+
+      return true
+    })
+  }, [listFilters, visibleCalls])
+
+  const callTableColumns: Array<DataTableColumn<CallRecord>> = [
+    {
+      id: "record",
+      header: "Kayıt",
+      size: 190,
+      minSize: 150,
+      accessor: (call) => `${call.recordNumber} ${call.createdAt}`,
+      cell: (call) => <span className="truncate font-medium text-foreground">{call.recordNumber}</span>,
+    },
+    {
+      id: "student",
+      header: "Kişi",
+      size: 240,
+      minSize: 180,
+      accessor: (call) => `${call.studentName ?? ""} ${call.phoneNumber} ${call.studentTc ?? ""}`,
+      cell: (call) => (
+        <div className="grid gap-1">
+          <span className="truncate font-medium text-foreground">
+            {call.studentName || call.phoneNumber || "-"}
+          </span>
+          <span className="truncate text-xs">
+            {[fieldIsVisible("phoneNumber") ? call.phoneNumber : null, fieldIsVisible("studentTc") ? call.studentTc : null]
+              .filter(Boolean)
+              .join(" · ") || "-"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: "category",
+      header: "Kategori",
+      size: 220,
+      minSize: 160,
+      accessor: (call) => `${call.category} ${call.interactionType}`,
+      cell: (call) => (
+        <div className="grid gap-1">
+          <span className="truncate text-foreground">{call.category}</span>
+          <span className="truncate text-xs">{call.interactionType}</span>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Durum",
+      size: 150,
+      minSize: 120,
+      accessor: (call) => optionLabel("status", call.status),
+      cell: (call) => (
+        <Badge variant={call.status === "resolved" ? "default" : "outline"}>
+          {optionLabel("status", call.status)}
+        </Badge>
+      ),
+    },
+    {
+      id: "priority",
+      header: "Öncelik",
+      size: 140,
+      minSize: 110,
+      accessor: (call) => optionLabel("priority", call.priority),
+      cell: (call) => (
+        <Badge variant={call.priority === "urgent" ? "default" : "secondary"}>
+          {optionLabel("priority", call.priority)}
+        </Badge>
+      ),
+    },
+    {
+      id: "followUp",
+      header: "Takip",
+      size: 170,
+      minSize: 130,
+      accessor: (call) => (call.needsFollowUp ? `Takip ${call.followUpAt ?? ""}` : "Takip yok"),
+      cell: (call) =>
+        call.needsFollowUp ? (
+          <div className="grid gap-1">
+            <Badge variant="outline">Takip var</Badge>
+            {call.followUpAt && <span className="truncate text-xs">{formatDate(call.followUpAt)}</span>}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    },
+    {
+      id: "openedBy",
+      header: "Açan",
+      size: 180,
+      minSize: 140,
+      accessor: (call) => call.openedByName,
+      cell: (call) => <span className="truncate">{call.openedByName}</span>,
+    },
+    {
+      id: "createdAt",
+      header: "Oluşturulma",
+      size: 180,
+      minSize: 140,
+      accessor: (call) => formatDate(call.createdAt),
+      cell: (call) => <span className="truncate">{formatDate(call.createdAt)}</span>,
+    },
+  ]
 
   function validateCallForm(form: CallForm, mode: "create" | "edit") {
     const errors: CallFormErrors = {}
@@ -390,36 +529,47 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   }, [activeScope, canViewAll])
 
   useEffect(() => {
-    if (visibleCalls.length === 0) {
+    if (filteredCalls.length === 0) {
       setSelectedCallId("")
       return
     }
 
-    if (!visibleCalls.some((call) => call.id === selectedCallId)) {
-      setSelectedCallId(visibleCalls[0].id)
+    if (!filteredCalls.some((call) => call.id === selectedCallId)) {
+      setSelectedCallId(filteredCalls[0].id)
     }
-  }, [selectedCallId, visibleCalls])
+  }, [filteredCalls, selectedCallId])
 
-  function openEditDialog() {
-    if (!selectedCall) {
+  useEffect(() => {
+    if (!isDetailOpen || !selectedCall) {
       return
     }
 
+    setEditForm(callToForm(selectedCall))
     setEditError("")
     setEditFieldErrors({})
-    setEditForm({
-      phoneNumber: selectedCall.phoneNumber,
-      studentTc: selectedCall.studentTc ?? "",
-      studentName: selectedCall.studentName ?? "",
-      interactionType: selectedCall.interactionType,
-      category: selectedCall.category,
-      issue: selectedCall.issue,
-      initialNote: selectedCall.initialNote ?? "",
-      priority: selectedCall.priority,
-      needsFollowUp: selectedCall.needsFollowUp,
-      followUpAt: selectedCall.followUpAt ? toDateTimeInputValue(selectedCall.followUpAt) : "",
-    })
-    setIsEditOpen(true)
+  }, [isDetailOpen, selectedCall])
+
+  function callToForm(call: CallRecord): CallForm {
+    return {
+      phoneNumber: call.phoneNumber,
+      studentTc: call.studentTc ?? "",
+      studentName: call.studentName ?? "",
+      interactionType: call.interactionType,
+      category: call.category,
+      issue: call.issue,
+      initialNote: call.initialNote ?? "",
+      priority: call.priority,
+      needsFollowUp: call.needsFollowUp,
+      followUpAt: call.followUpAt ? toDateTimeInputValue(call.followUpAt) : "",
+    }
+  }
+
+  function openCallDetailDialog(call: CallRecord) {
+    setSelectedCallId(call.id)
+    setEditError("")
+    setEditFieldErrors({})
+    setEditForm(callToForm(call))
+    setIsDetailOpen(true)
   }
 
   function setCreateDialogOpen(open: boolean) {
@@ -442,6 +592,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     }
 
     setSelectedCallId(callId)
+    setIsDetailOpen(true)
     void loadCallDetail(callId)
   }
 
@@ -470,7 +621,6 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
         method: "PATCH",
         body: JSON.stringify(buildEditableCallPayload(editForm)),
       })
-      setIsEditOpen(false)
       setMessage("Çağrı bilgileri güncellendi.")
       await loadCalls()
       await loadCallDetail(selectedCall.id)
@@ -660,219 +810,438 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
 
       {message && <p className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">{message}</p>}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Çağrı Kayıtları</CardTitle>
-            <CardDescription>Yetkiniz kapsamındaki kayıtlar listelenir.</CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle>Çağrı Kayıtları</CardTitle>
+          <CardDescription>
+            Yetkiniz kapsamındaki kayıtları arayın, filtreleyin ve satıra tıklayarak detayları açın.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 lg:grid-cols-4">
+            <CallFilterSelect
+              label="Durum"
+              value={listFilters.status}
+              onChange={(status) => setListFilters((current) => ({ ...current, status }))}
+              options={
+                statusOptions.length > 0
+                  ? statusOptions
+                  : Object.entries(statusLabels).map(([value, label]) => ({ id: value, value, label }))
+              }
+            />
+            <CallFilterSelect
+              label="Öncelik"
+              value={listFilters.priority}
+              onChange={(priority) => setListFilters((current) => ({ ...current, priority }))}
+              options={
+                priorityOptions.length > 0
+                  ? priorityOptions
+                  : Object.entries(priorityLabels).map(([value, label]) => ({ id: value, value, label }))
+              }
+            />
+            <CallFilterSelect
+              label="Kategori"
+              value={listFilters.category}
+              onChange={(category) => setListFilters((current) => ({ ...current, category }))}
+              options={issueCategories}
+            />
             <div className="grid gap-2">
-              {visibleCalls.map((call) => (
-                <button
-                  key={call.id}
-                  type="button"
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted data-[active=true]:border-primary data-[active=true]:bg-primary/5"
-                  data-active={call.id === selectedCallId}
-                  onClick={() => setSelectedCallId(call.id)}
-                >
-                  <span className="min-w-0">
-                    <strong className="block truncate text-sm font-medium">{call.recordNumber}</strong>
-                    <small className="block truncate text-xs text-muted-foreground">
-                      {call.studentName || call.phoneNumber}
-                    </small>
-                  </span>
-                  <span className="flex flex-wrap justify-end gap-1.5">
-                    <Badge variant="outline">{optionLabel("status", call.status)}</Badge>
-                    <Badge variant={call.priority === "urgent" ? "default" : "secondary"}>
-                      {optionLabel("priority", call.priority)}
-                    </Badge>
-                  </span>
-                </button>
-              ))}
-              {visibleCalls.length === 0 && <p className="text-sm text-muted-foreground">Henüz görüntülenecek çağrı kaydı yok.</p>}
+              <Label>Takip</Label>
+              <Select
+                value={listFilters.followUp}
+                onValueChange={(followUp) =>
+                  setListFilters((current) => ({
+                    ...current,
+                    followUp: followUp as CallListFilters["followUp"],
+                  }))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tümü</SelectItem>
+                  <SelectItem value="needed">Takip var</SelectItem>
+                  <SelectItem value="none">Takip yok</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              {filteredCalls.length} kayıt gösteriliyor
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setListFilters({
+                  status: "all",
+                  priority: "all",
+                  category: "all",
+                  followUp: "all",
+                })
+              }
+            >
+              Filtreleri temizle
+            </Button>
+          </div>
+          <DataTable
+            columns={callTableColumns}
+            data={filteredCalls}
+            getRowId={(call) => call.id}
+            emptyText="Filtrelere uygun çağrı kaydı bulunamadı."
+            searchPlaceholder="Kayıt no, öğrenci, telefon veya kategoride ara..."
+            onRowClick={openCallDetailDialog}
+            getRowClassName={(call) =>
+              call.id === selectedCallId
+                ? "bg-primary/5 hover:bg-primary/10"
+                : undefined
+            }
+          />
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Çağrı Detayı</CardTitle>
-            <CardDescription>Notlar, durum ve çözüm işlemleri.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {selectedCall ? (
-              <div className="grid gap-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm font-medium">{selectedCall.recordNumber}</strong>
-                    <span className="block truncate text-sm text-muted-foreground">
-                      {selectedCall.category} · {selectedCall.interactionType}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Badge variant={selectedCall.status === "resolved" ? "default" : "outline"}>
-                      {optionLabel("status", selectedCall.status)}
-                    </Badge>
-                    {canEdit && !selectedCall.isLocked && (
-                      <Button type="button" size="sm" variant="outline" onClick={openEditDialog}>
-                        <Pencil />
-                        Bilgileri düzenle
-                      </Button>
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>{selectedCall?.recordNumber ?? "Çağrı Detayı"}</DialogTitle>
+            <DialogDescription>
+              Çağrı bilgilerini görüntüleyin; yetkili ve düzenlenebilir alanları doğrudan güncelleyin.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedCall ? (
+            <div className="grid gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {selectedCall.category} · {selectedCall.interactionType} · {formatDate(selectedCall.createdAt)}
+                </span>
+                <Badge variant={selectedCall.status === "resolved" ? "default" : "outline"}>
+                  {optionLabel("status", selectedCall.status)}
+                </Badge>
+              </div>
+
+              <Tabs defaultValue="summary">
+                <TabsList className="w-full justify-start overflow-x-auto">
+                  <TabsTrigger value="summary">Özet ve Bilgiler</TabsTrigger>
+                  <TabsTrigger value="notes">Notlar</TabsTrigger>
+                  <TabsTrigger value="resolution">Çözüm</TabsTrigger>
+                  <TabsTrigger value="history">Geçmiş</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="summary">
+                  <form className="grid gap-4" onSubmit={updateCall} noValidate>
+                    {editError && (
+                      <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        {editError}
+                      </p>
                     )}
-                  </div>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {fieldIsVisible("phoneNumber") && <Info label={fieldDisplayLabel("phoneNumber")} value={selectedCall.phoneNumber} />}
-                  {fieldIsVisible("studentTc") && <Info label={fieldDisplayLabel("studentTc")} value={selectedCall.studentTc ?? "-"} />}
-                  {fieldIsVisible("studentName") && <Info label={fieldDisplayLabel("studentName")} value={selectedCall.studentName ?? "-"} />}
-                  <Info label="Açan" value={selectedCall.openedByName} />
-                  {fieldIsVisible("priority") && <Info label={fieldDisplayLabel("priority")} value={optionLabel("priority", selectedCall.priority)} />}
-                </div>
-
-                {fieldIsVisible("issue") && (
-                  <DetailSection title={fieldDisplayLabel("issue")}>{selectedCall.issue}</DetailSection>
-                )}
-
-                {fieldIsVisible("initialNote") && selectedCall.initialNote && (
-                  <DetailSection title={fieldDisplayLabel("initialNote")}>{selectedCall.initialNote}</DetailSection>
-                )}
-
-                {canEdit && !selectedCall.isLocked && (
-                  <div className="border-t pt-4">
-                    <div className="grid gap-2 sm:max-w-xs">
-                      <Label>Durum</Label>
-                      <Select
-                        value={selectedCall.status}
-                        onValueChange={(status) => void updateStatus(status as CallStatus)}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(statusOptions.length > 0
-                            ? statusOptions
-                            : Object.entries(statusLabels).map(([value, label]) => ({ id: value, value, label }))
-                          )
-                            .filter((option) => option.value !== "resolved")
-                            .map((option) => (
-                              <SelectItem key={option.id} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <Info label="Açan" value={selectedCall.openedByName} />
+                      <Info label="Oluşturulma" value={formatDate(selectedCall.createdAt)} />
+                      <Info label="Durum" value={optionLabel("status", selectedCall.status)} />
                     </div>
-                  </div>
-                )}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {fieldIsVisible("phoneNumber") && (
+                        <Field label={fieldDisplayLabel("phoneNumber")} error={editFieldErrors.phoneNumber}>
+                          <Input
+                            value={editForm.phoneNumber}
+                            onChange={(event) => setEditFieldValue("phoneNumber", event.target.value)}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("phoneNumber")}
+                            aria-invalid={Boolean(editFieldErrors.phoneNumber)}
+                            required={fieldIsRequired("phoneNumber")}
+                          />
+                        </Field>
+                      )}
+                      {fieldIsVisible("studentTc") && (
+                        <Field label={fieldDisplayLabel("studentTc")} error={editFieldErrors.studentTc}>
+                          <Input
+                            value={editForm.studentTc}
+                            onChange={(event) => setEditFieldValue("studentTc", event.target.value)}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("studentTc")}
+                            aria-invalid={Boolean(editFieldErrors.studentTc)}
+                            maxLength={11}
+                            required={fieldIsRequired("studentTc")}
+                          />
+                        </Field>
+                      )}
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {fieldIsVisible("studentName") && (
+                        <Field label={fieldDisplayLabel("studentName")} error={editFieldErrors.studentName}>
+                          <Input
+                            value={editForm.studentName}
+                            onChange={(event) => setEditFieldValue("studentName", event.target.value)}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("studentName")}
+                            aria-invalid={Boolean(editFieldErrors.studentName)}
+                            required={fieldIsRequired("studentName")}
+                          />
+                        </Field>
+                      )}
+                      {fieldIsVisible("interactionType") && (
+                        <div className="grid gap-2">
+                          <Label>{fieldDisplayLabel("interactionType")}</Label>
+                          <Select
+                            value={editForm.interactionType}
+                            onValueChange={(interactionType) => setEditFieldValue("interactionType", interactionType)}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("interactionType")}
+                          >
+                            <SelectTrigger className="w-full" aria-invalid={Boolean(editFieldErrors.interactionType)}>
+                              <SelectValue placeholder="Görüşme tipi seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {interactionTypes.map((option) => (
+                                <SelectItem key={option.id} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {editFieldErrors.interactionType && (
+                            <p className="text-xs text-destructive">{editFieldErrors.interactionType}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {fieldIsVisible("category") && (
+                        <div className="grid gap-2">
+                          <Label>{fieldDisplayLabel("category")}</Label>
+                          <Select
+                            value={editForm.category}
+                            onValueChange={(category) => setEditFieldValue("category", category)}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("category")}
+                          >
+                            <SelectTrigger className="w-full" aria-invalid={Boolean(editFieldErrors.category)}>
+                              <SelectValue placeholder="Sorun kategorisi seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {issueCategories.map((option) => (
+                                <SelectItem key={option.id} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {editFieldErrors.category && (
+                            <p className="text-xs text-destructive">{editFieldErrors.category}</p>
+                          )}
+                        </div>
+                      )}
+                      {fieldIsVisible("priority") && (
+                        <div className="grid gap-2">
+                          <Label>{fieldDisplayLabel("priority")}</Label>
+                          <Select
+                            value={editForm.priority}
+                            onValueChange={(priority) => setEditFieldValue("priority", priority as CallPriority)}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("priority")}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(priorityOptions.length > 0
+                                ? priorityOptions
+                                : Object.entries(priorityLabels).map(([value, label]) => ({ id: value, value, label }))
+                              ).map((option) => (
+                                <SelectItem key={option.id} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    {fieldIsVisible("issue") && (
+                      <Field label={fieldDisplayLabel("issue")} error={editFieldErrors.issue}>
+                        <Textarea
+                          value={editForm.issue}
+                          onChange={(event) => setEditFieldValue("issue", event.target.value)}
+                          disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("issue")}
+                          aria-invalid={Boolean(editFieldErrors.issue)}
+                          required={fieldIsRequired("issue")}
+                        />
+                      </Field>
+                    )}
+                    {fieldIsVisible("initialNote") && (
+                      <Field label={fieldDisplayLabel("initialNote")} error={editFieldErrors.initialNote}>
+                        <Textarea
+                          value={editForm.initialNote}
+                          onChange={(event) => setEditFieldValue("initialNote", event.target.value)}
+                          disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("initialNote")}
+                          aria-invalid={Boolean(editFieldErrors.initialNote)}
+                          required={fieldIsRequired("initialNote")}
+                        />
+                      </Field>
+                    )}
+                    {fieldIsVisible("needsFollowUp") && (
+                      <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[max-content_minmax(260px,1fr)] sm:items-end">
+                        <label className="flex min-h-8 items-center gap-2 text-sm font-medium">
+                          <Checkbox
+                            checked={editForm.needsFollowUp}
+                            disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("needsFollowUp")}
+                            onCheckedChange={(checked) =>
+                              setEditFieldValue("needsFollowUp", checked === true)
+                            }
+                          />
+                          {fieldDisplayLabel("needsFollowUp")}
+                        </label>
+                        {editForm.needsFollowUp && fieldIsVisible("followUpAt") && (
+                          <Field label={fieldDisplayLabel("followUpAt")} error={editFieldErrors.followUpAt}>
+                            <Input
+                              type="datetime-local"
+                              value={editForm.followUpAt}
+                              onChange={(event) => setEditFieldValue("followUpAt", event.target.value)}
+                              disabled={!canEdit || selectedCall.isLocked || !fieldCanEdit("followUpAt")}
+                              aria-invalid={Boolean(editFieldErrors.followUpAt)}
+                              required={fieldIsRequired("followUpAt")}
+                            />
+                          </Field>
+                        )}
+                      </div>
+                    )}
+                    {canEdit && !selectedCall.isLocked && (
+                      <DialogFooter>
+                        <Button type="submit" disabled={isLoading}>
+                          Kaydet
+                        </Button>
+                      </DialogFooter>
+                    )}
+                  </form>
+                </TabsContent>
 
-                {canAddAnyNote && !selectedCall.isLocked && (
-                  <form className="grid gap-3 border-t pt-4" onSubmit={addNote}>
-                    <div className="grid gap-3 sm:grid-cols-[minmax(180px,0.35fr)_minmax(260px,1fr)]">
-                      <div className="grid gap-2">
-                        <Label>Not türü</Label>
+                  <TabsContent value="notes" className="grid gap-4">
+                    {canAddAnyNote && !selectedCall.isLocked && (
+                      <form className="grid gap-3 rounded-lg border p-3" onSubmit={addNote}>
+                        <div className="grid gap-3 sm:grid-cols-[minmax(180px,0.35fr)_minmax(260px,1fr)]">
+                          <div className="grid gap-2">
+                            <Label>Not türü</Label>
+                            <Select
+                              value={noteForm.noteType}
+                              onValueChange={(noteType) => setNoteForm((current) => ({ ...current, noteType }))}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(noteTypeLabels).map(([value, label]) => (
+                                  <SelectItem key={value} value={value}>
+                                    {label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Not</Label>
+                            <Textarea
+                              value={noteForm.content}
+                              onChange={(event) => setNoteForm((current) => ({ ...current, content: event.target.value }))}
+                              placeholder="Not içeriği"
+                            />
+                          </div>
+                        </div>
+                        <Button type="submit" disabled={isLoading || !noteForm.content.trim()}>
+                          <MessageSquarePlus />
+                          Not ekle
+                        </Button>
+                      </form>
+                    )}
+                    <div className="grid gap-2">
+                      {selectedDetail?.notes.map((note) => (
+                        <TimelineItem
+                          key={note.id}
+                          title={note.authorName}
+                          meta={`${noteTypeLabels[note.noteType as keyof typeof noteTypeLabels] ?? note.noteType} · ${formatDate(note.createdAt)}`}
+                        >
+                          {note.content}
+                        </TimelineItem>
+                      ))}
+                      {selectedDetail?.notes.length === 0 && <p className="text-sm text-muted-foreground">Ek not yok.</p>}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="resolution" className="grid gap-4">
+                    {canEdit && !selectedCall.isLocked && (
+                      <div className="grid gap-2 sm:max-w-xs">
+                        <Label>Durum</Label>
                         <Select
-                          value={noteForm.noteType}
-                          onValueChange={(noteType) => setNoteForm((current) => ({ ...current, noteType }))}
+                          value={selectedCall.status}
+                          onValueChange={(status) => void updateStatus(status as CallStatus)}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(noteTypeLabels).map(([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            ))}
+                            {(statusOptions.length > 0
+                              ? statusOptions
+                              : Object.entries(statusLabels).map(([value, label]) => ({ id: value, value, label }))
+                            )
+                              .filter((option) => option.value !== "resolved")
+                              .map((option) => (
+                                <SelectItem key={option.id} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="grid gap-2">
-                        <Label>Not</Label>
-                        <Textarea
-                          value={noteForm.content}
-                          onChange={(event) => setNoteForm((current) => ({ ...current, content: event.target.value }))}
-                          placeholder="Not içeriği"
-                        />
-                      </div>
-                    </div>
-                    <Button type="submit" disabled={isLoading || !noteForm.content.trim()}>
-                      <MessageSquarePlus />
-                      Not ekle
-                    </Button>
-                  </form>
-                )}
+                    )}
 
-                {canResolve && !selectedCall.isLocked && (
-                  <form className="grid gap-3 border-t pt-4" onSubmit={resolveCall}>
-                    <div className="grid gap-3 sm:grid-cols-[minmax(180px,0.35fr)_minmax(260px,1fr)]">
-                      <div className="grid gap-2">
-                        <Label>Çözüm kategorisi</Label>
-                        <Select
-                          value={resolutionForm.resolutionCategory}
-                          onValueChange={(resolutionCategory) =>
-                            setResolutionForm((current) => ({ ...current, resolutionCategory }))
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Çözüm kategorisi seçin" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {resolutionCategories.map((option) => (
-                              <SelectItem key={option.id} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>Çözüm açıklaması</Label>
-                        <Textarea
-                          value={resolutionForm.resolutionDescription}
-                          onChange={(event) =>
-                            setResolutionForm((current) => ({
-                              ...current,
-                              resolutionDescription: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                    <Button type="submit" disabled={isLoading || !resolutionForm.resolutionDescription.trim()}>
-                      <CheckCircle2 />
-                      Çözüldü yap
-                    </Button>
-                  </form>
-                )}
+                    {canResolve && !selectedCall.isLocked && (
+                      <form className="grid gap-3 rounded-lg border p-3" onSubmit={resolveCall}>
+                        <div className="grid gap-3 sm:grid-cols-[minmax(180px,0.35fr)_minmax(260px,1fr)]">
+                          <div className="grid gap-2">
+                            <Label>Çözüm kategorisi</Label>
+                            <Select
+                              value={resolutionForm.resolutionCategory}
+                              onValueChange={(resolutionCategory) =>
+                                setResolutionForm((current) => ({ ...current, resolutionCategory }))
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Çözüm kategorisi seçin" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {resolutionCategories.map((option) => (
+                                  <SelectItem key={option.id} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Çözüm açıklaması</Label>
+                            <Textarea
+                              value={resolutionForm.resolutionDescription}
+                              onChange={(event) =>
+                                setResolutionForm((current) => ({
+                                  ...current,
+                                  resolutionDescription: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <Button type="submit" disabled={isLoading || !resolutionForm.resolutionDescription.trim()}>
+                          <CheckCircle2 />
+                          Çözüldü yap
+                        </Button>
+                      </form>
+                    )}
 
-                {canReopen && selectedCall.isLocked && (
-                  <Button type="button" variant="outline" onClick={() => void reopenCall()}>
-                    <RotateCcw />
-                    Yeniden aç
-                  </Button>
-                )}
+                    {canReopen && selectedCall.isLocked && (
+                      <Button type="button" variant="outline" onClick={() => void reopenCall()}>
+                        <RotateCcw />
+                        Yeniden aç
+                      </Button>
+                    )}
+                  </TabsContent>
 
-                <section className="border-t pt-4">
-                  <h3 className="mb-2 text-sm font-semibold">Ek notlar</h3>
-                  <div className="grid gap-2">
-                    {selectedDetail?.notes.map((note) => (
-                      <TimelineItem
-                        key={note.id}
-                        title={note.authorName}
-                        meta={`${noteTypeLabels[note.noteType as keyof typeof noteTypeLabels] ?? note.noteType} · ${formatDate(note.createdAt)}`}
-                      >
-                        {note.content}
-                      </TimelineItem>
-                    ))}
-                    {selectedDetail?.notes.length === 0 && <p className="text-sm text-muted-foreground">Ek not yok.</p>}
-                  </div>
-                </section>
-
-                <section className="border-t pt-4">
-                  <h3 className="mb-2 text-sm font-semibold">İşlem geçmişi</h3>
-                  <div className="grid gap-2">
+                  <TabsContent value="history" className="grid gap-2">
                     {selectedDetail?.events.map((event) => (
                       <TimelineItem
                         key={event.id}
@@ -882,15 +1251,15 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                         {event.description}
                       </TimelineItem>
                     ))}
-                  </div>
-                </section>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Detay görmek için bir çağrı kaydı seçin.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                    {selectedDetail?.events.length === 0 && <p className="text-sm text-muted-foreground">İşlem geçmişi yok.</p>}
+                  </TabsContent>
+              </Tabs>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Detay görmek için bir çağrı kaydı seçin.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isCreateOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-3xl">
@@ -1077,191 +1446,6 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Çağrı Bilgilerini Düzenle</DialogTitle>
-            <DialogDescription>
-              Yalnızca ayarlarda düzenlenebilir olan alanlar değiştirilebilir.
-            </DialogDescription>
-          </DialogHeader>
-          <form className="grid gap-4" onSubmit={updateCall} noValidate>
-            {editError && (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {editError}
-              </p>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fieldIsVisible("phoneNumber") && (
-                <Field label={fieldDisplayLabel("phoneNumber")} error={editFieldErrors.phoneNumber}>
-                  <Input
-                    value={editForm.phoneNumber}
-                    onChange={(event) => setEditFieldValue("phoneNumber", event.target.value)}
-                    disabled={!fieldCanEdit("phoneNumber")}
-                    aria-invalid={Boolean(editFieldErrors.phoneNumber)}
-                    required={fieldIsRequired("phoneNumber")}
-                  />
-                </Field>
-              )}
-              {fieldIsVisible("studentTc") && (
-                <Field label={fieldDisplayLabel("studentTc")} error={editFieldErrors.studentTc}>
-                  <Input
-                    value={editForm.studentTc}
-                    onChange={(event) => setEditFieldValue("studentTc", event.target.value)}
-                    disabled={!fieldCanEdit("studentTc")}
-                    aria-invalid={Boolean(editFieldErrors.studentTc)}
-                    maxLength={11}
-                    required={fieldIsRequired("studentTc")}
-                  />
-                </Field>
-              )}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fieldIsVisible("studentName") && (
-                <Field label={fieldDisplayLabel("studentName")} error={editFieldErrors.studentName}>
-                  <Input
-                    value={editForm.studentName}
-                    onChange={(event) => setEditFieldValue("studentName", event.target.value)}
-                    disabled={!fieldCanEdit("studentName")}
-                    aria-invalid={Boolean(editFieldErrors.studentName)}
-                    required={fieldIsRequired("studentName")}
-                  />
-                </Field>
-              )}
-              {fieldIsVisible("interactionType") && (
-                <div className="grid gap-2">
-                  <Label>{fieldDisplayLabel("interactionType")}</Label>
-                  <Select
-                    value={editForm.interactionType}
-                    onValueChange={(interactionType) => setEditFieldValue("interactionType", interactionType)}
-                    disabled={!fieldCanEdit("interactionType")}
-                  >
-                    <SelectTrigger className="w-full" aria-invalid={Boolean(editFieldErrors.interactionType)}>
-                      <SelectValue placeholder="Görüşme tipi seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {interactionTypes.map((option) => (
-                        <SelectItem key={option.id} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {editFieldErrors.interactionType && (
-                    <p className="text-xs text-destructive">{editFieldErrors.interactionType}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fieldIsVisible("category") && (
-                <div className="grid gap-2">
-                  <Label>{fieldDisplayLabel("category")}</Label>
-                  <Select
-                    value={editForm.category}
-                    onValueChange={(category) => setEditFieldValue("category", category)}
-                    disabled={!fieldCanEdit("category")}
-                  >
-                    <SelectTrigger className="w-full" aria-invalid={Boolean(editFieldErrors.category)}>
-                      <SelectValue placeholder="Sorun kategorisi seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {issueCategories.map((option) => (
-                        <SelectItem key={option.id} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {editFieldErrors.category && (
-                    <p className="text-xs text-destructive">{editFieldErrors.category}</p>
-                  )}
-                </div>
-              )}
-              {fieldIsVisible("priority") && (
-                <div className="grid gap-2">
-                  <Label>{fieldDisplayLabel("priority")}</Label>
-                  <Select
-                    value={editForm.priority}
-                    onValueChange={(priority) => setEditFieldValue("priority", priority as CallPriority)}
-                    disabled={!fieldCanEdit("priority")}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(priorityOptions.length > 0
-                        ? priorityOptions
-                        : Object.entries(priorityLabels).map(([value, label]) => ({ id: value, value, label }))
-                      ).map((option) => (
-                        <SelectItem key={option.id} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            {fieldIsVisible("issue") && (
-              <Field label={fieldDisplayLabel("issue")} error={editFieldErrors.issue}>
-                <Textarea
-                  value={editForm.issue}
-                  onChange={(event) => setEditFieldValue("issue", event.target.value)}
-                  disabled={!fieldCanEdit("issue")}
-                  aria-invalid={Boolean(editFieldErrors.issue)}
-                  required={fieldIsRequired("issue")}
-                />
-              </Field>
-            )}
-            {fieldIsVisible("initialNote") && (
-              <Field label={fieldDisplayLabel("initialNote")} error={editFieldErrors.initialNote}>
-                <Textarea
-                  value={editForm.initialNote}
-                  onChange={(event) => setEditFieldValue("initialNote", event.target.value)}
-                  disabled={!fieldCanEdit("initialNote")}
-                  aria-invalid={Boolean(editFieldErrors.initialNote)}
-                  required={fieldIsRequired("initialNote")}
-                />
-              </Field>
-            )}
-            {fieldIsVisible("needsFollowUp") && (
-              <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[max-content_minmax(260px,1fr)] sm:items-end">
-                <label className="flex min-h-8 items-center gap-2 text-sm font-medium">
-                  <Checkbox
-                    checked={editForm.needsFollowUp}
-                    disabled={!fieldCanEdit("needsFollowUp")}
-                    onCheckedChange={(checked) =>
-                      setEditFieldValue("needsFollowUp", checked === true)
-                    }
-                  />
-                  {fieldDisplayLabel("needsFollowUp")}
-                </label>
-                {editForm.needsFollowUp && fieldIsVisible("followUpAt") && (
-                  <Field label={fieldDisplayLabel("followUpAt")} error={editFieldErrors.followUpAt}>
-                    <Input
-                      type="datetime-local"
-                      value={editForm.followUpAt}
-                      onChange={(event) => setEditFieldValue("followUpAt", event.target.value)}
-                      disabled={!fieldCanEdit("followUpAt")}
-                      aria-invalid={Boolean(editFieldErrors.followUpAt)}
-                      required={fieldIsRequired("followUpAt")}
-                    />
-                  </Field>
-                )}
-              </div>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
-                Vazgeç
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                Kaydet
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
@@ -1275,21 +1459,43 @@ function Stat({ icon, label }: { icon: ReactNode; label: string }) {
   )
 }
 
+function CallFilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ id: string; value: string; label: string }>
+}) {
+  return (
+    <div className="grid gap-2">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Tümü</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option.id} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border p-3">
       <span className="block text-xs text-muted-foreground">{label}</span>
       <strong className="mt-1 block break-words text-sm font-medium">{value}</strong>
     </div>
-  )
-}
-
-function DetailSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="border-t pt-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
-      <p className="text-sm leading-6 text-muted-foreground">{children}</p>
-    </section>
   )
 }
 

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { OptionBadge } from "@/components/option-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 import type {
   CallFormFieldSetting,
   CallFormOption,
@@ -50,6 +52,11 @@ const editableOptionTypes: EditableOptionType[] = [
   "priority",
   "resolution_category",
 ];
+const colorEditableOptionTypes = new Set<EditableOptionType>([
+  "status",
+  "priority",
+]);
+const defaultOptionColor = "#64748b";
 
 const optionTypeLabels: Record<EditableOptionType, string> = {
   interaction_type: "Görüşme Tipleri",
@@ -81,6 +88,7 @@ const defaultPrivacySettings: PrivacySettings = {
 };
 
 export function SettingsModule({ request }: SettingsModuleProps) {
+  const toast = useToast();
   const [options, setOptions] = useState<CallFormOption[]>([]);
   const [fields, setFields] = useState<CallFormFieldSetting[]>([]);
   const [activeOptionType, setActiveOptionType] =
@@ -88,6 +96,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
   const [form, setForm] = useState({
     label: "",
     sortOrder: 0,
+    color: defaultOptionColor,
   });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [security, setSecurity] = useState<SecuritySettings>(
@@ -112,6 +121,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
   const activeOptions = options
     .filter((option) => option.type === activeOptionType)
     .sort((first, second) => first.sortOrder - second.sortOrder);
+  const activeTypeSupportsColor = colorEditableOptionTypes.has(activeOptionType);
 
   useEffect(() => {
     optionsRef.current = options;
@@ -229,15 +239,18 @@ export function SettingsModule({ request }: SettingsModuleProps) {
         method: "POST",
         body: JSON.stringify({
           label: form.label,
+          color: activeTypeSupportsColor ? form.color : null,
           sortOrder: form.sortOrder,
         }),
       });
       setForm((current) => ({
         ...current,
         label: "",
+        color: defaultOptionColor,
         sortOrder: current.sortOrder + 10,
       }));
       setMessage("Seçenek eklendi.");
+      toast.success("Seçenek eklendi.");
       await loadOptions();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Seçenek eklenemedi.");
@@ -256,6 +269,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
         body: JSON.stringify({ options, fields }),
       });
       setMessage("Tüm değişiklikler kaydedildi.");
+      toast.success("Başarıyla kaydedildi.");
       await loadOptions();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Seçenekler kaydedilemedi.");
@@ -293,6 +307,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
       setIpAllowlistText(data.security.ipAllowlist.join("\n"));
       setHasSecurityChanges(false);
       setMessage("Güvenlik ve bildirim ayarları kaydedildi.");
+      toast.success("Başarıyla kaydedildi.");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Güvenlik ayarları kaydedilemedi.",
@@ -476,7 +491,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
 
   function changeActiveOptionType(type: string) {
     setActiveOptionType(type as EditableOptionType);
-    setForm((current) => ({ ...current, label: "" }));
+    setForm((current) => ({ ...current, label: "", color: defaultOptionColor }));
   }
 
   return (
@@ -515,7 +530,7 @@ export function SettingsModule({ request }: SettingsModuleProps) {
               </Tabs>
 
               <form
-                className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto] lg:items-end"
+                className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto] lg:items-end"
                 onSubmit={createOption}
               >
                 <div className="grid gap-2">
@@ -531,6 +546,22 @@ export function SettingsModule({ request }: SettingsModuleProps) {
                     placeholder="Örn. Telefon dönüşü"
                   />
                 </div>
+                {activeTypeSupportsColor && (
+                  <div className="grid gap-2">
+                    <Label>Renk</Label>
+                    <Input
+                      className="h-8 w-16 cursor-pointer p-1"
+                      type="color"
+                      value={form.color}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          color: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                )}
                 <Button
                   type="submit"
                   disabled={isLoading || form.label.trim().length < 2}
@@ -557,7 +588,11 @@ export function SettingsModule({ request }: SettingsModuleProps) {
                 )}
                 {activeOptions.map((option) => (
                   <div
-                    className="grid grid-cols-[1.75rem_minmax(180px,1fr)_auto] items-center gap-2 rounded-lg border bg-background p-2 shadow-xs transition-[background-color,border-color,box-shadow,opacity] duration-150 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:opacity-70 data-[dragging=true]:shadow-md max-sm:grid-cols-1"
+                    className={`grid ${
+                      activeTypeSupportsColor
+                        ? "grid-cols-[1.75rem_minmax(180px,1fr)_minmax(170px,auto)_auto]"
+                        : "grid-cols-[1.75rem_minmax(180px,1fr)_auto]"
+                    } items-center gap-2 rounded-lg border bg-background p-2 shadow-xs transition-[background-color,border-color,box-shadow,opacity] duration-150 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:opacity-70 data-[dragging=true]:shadow-md max-sm:grid-cols-1`}
                     key={option.id}
                     ref={(node) => {
                       if (node) {
@@ -588,6 +623,25 @@ export function SettingsModule({ request }: SettingsModuleProps) {
                         })
                       }
                     />
+                    {activeTypeSupportsColor && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          className="h-8 w-14 cursor-pointer p-1"
+                          type="color"
+                          value={option.color ?? defaultOptionColor}
+                          onChange={(event) =>
+                            patchLocalOption(option.id, {
+                              color: event.target.value,
+                            })
+                          }
+                          title="Renk seç"
+                        />
+                        <OptionBadge
+                          label={option.label}
+                          color={option.color ?? defaultOptionColor}
+                        />
+                      </div>
+                    )}
                     <Flag
                       label="Aktif"
                       checked={option.isActive}

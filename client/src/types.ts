@@ -163,6 +163,7 @@ export type CallFormOption = {
   type: CallOptionType
   label: string
   value: string
+  color: string | null
   isActive: boolean
   sortOrder: number
 }

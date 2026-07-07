@@ -3,6 +3,7 @@ import { Download, RefreshCw, Search } from "lucide-react";
 
 import { DataTable } from "@/components/data-table";
 import type { DataTableColumn } from "@/components/data-table";
+import { OptionBadge } from "@/components/option-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,6 +87,14 @@ export function ReportsModule({
     (option) => option.type === "priority" && option.isActive,
   );
 
+  const optionLabel = useCallback((type: CallFormOption["type"], value: string) => {
+    return filterOptions.find((option) => option.type === type && option.value === value)?.label ?? value;
+  }, [filterOptions]);
+
+  const optionColor = useCallback((type: CallFormOption["type"], value: string) => {
+    return filterOptions.find((option) => option.type === type && option.value === value)?.color ?? null;
+  }, [filterOptions]);
+
   const loadReports = useCallback(async () => {
     setIsLoading(true);
     setMessage("");
@@ -165,19 +174,27 @@ export function ReportsModule({
         id: "status",
         header: "Durum",
         size: 130,
-        cell: (call) => <Badge variant="outline">{call.status}</Badge>,
-        accessor: (call) => call.status,
+        cell: (call) => (
+          <OptionBadge
+            label={optionLabel("status", call.status)}
+            color={optionColor("status", call.status)}
+            fallbackVariant="outline"
+          />
+        ),
+        accessor: (call) => optionLabel("status", call.status),
       },
       {
         id: "priority",
         header: "Öncelik",
         size: 120,
         cell: (call) => (
-          <Badge variant={call.priority === "urgent" ? "default" : "secondary"}>
-            {call.priority}
-          </Badge>
+          <OptionBadge
+            label={optionLabel("priority", call.priority)}
+            color={optionColor("priority", call.priority)}
+            fallbackVariant={call.priority === "urgent" ? "default" : "secondary"}
+          />
         ),
-        accessor: (call) => call.priority,
+        accessor: (call) => optionLabel("priority", call.priority),
       },
       {
         id: "openedBy",
@@ -194,7 +211,7 @@ export function ReportsModule({
         accessor: (call) => call.createdAt,
       },
     ],
-    [],
+    [optionColor, optionLabel],
   );
 
   async function exportReport(format: "excel" | "pdf") {

@@ -45,6 +45,7 @@ type ReportFilterOptionRow = RowDataPacket & {
   option_type: "issue_category" | "status" | "priority";
   label: string;
   value: string | null;
+  color: string | null;
   sort_order: number;
 };
 
@@ -117,7 +118,7 @@ reportRoutes.get(
   requireAnyPermission(["reports.view", "reports.export"]),
   async (_req, res) => {
     const [rows] = await db.query<ReportFilterOptionRow[]>(
-      `SELECT id, option_type, label, value, sort_order
+      `SELECT id, option_type, label, value, color, sort_order
       FROM call_form_options
       WHERE is_active = 1 AND option_type IN ('issue_category', 'status', 'priority')
       ORDER BY option_type ASC, sort_order ASC, label ASC`,
@@ -129,6 +130,7 @@ reportRoutes.get(
         type: row.option_type,
         label: row.label,
         value: row.value ?? row.label,
+        color: row.color,
         isActive: true,
         sortOrder: row.sort_order,
       })),

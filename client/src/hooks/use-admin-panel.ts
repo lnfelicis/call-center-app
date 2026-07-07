@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 
+import { useToast } from "@/hooks/use-toast"
 import { isPasswordValid } from "@/lib/password"
 import type {
   AuthUser,
@@ -30,6 +31,7 @@ const emptyUserForm: UserForm = {
 }
 
 export function useAdminPanel() {
+  const toast = useToast()
   const [token, setToken] = useState(() => localStorage.getItem("call-center-token") ?? "")
   const [activeModule, setActiveModule] = useState<ModuleId>("dashboard")
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -243,6 +245,7 @@ export function useAdminPanel() {
       })
       setRoleForm(emptyRoleForm)
       setMessage("Rol oluşturuldu.")
+      toast.success("Rol oluşturuldu.")
       await loadPanelData()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Rol oluşturulamadı.")
@@ -270,6 +273,7 @@ export function useAdminPanel() {
         body: JSON.stringify({ permissions: selectedRole.permissions }),
       })
       setMessage("Rol izinleri kaydedildi.")
+      toast.success("İzinler kaydedildi.")
       await loadPanelData()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Rol izinleri kaydedilemedi.")
@@ -319,6 +323,7 @@ export function useAdminPanel() {
       })
       setUserForm({ ...emptyUserForm, roleId: roles[0]?.id ?? "" })
       setMessage("Kullanıcı oluşturuldu.")
+      toast.success("Kullanıcı oluşturuldu.")
       await loadPanelData()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Kullanıcı oluşturulamadı.")
@@ -340,6 +345,7 @@ export function useAdminPanel() {
         body: JSON.stringify(payload),
       })
       setMessage("Kullanıcı güncellendi.")
+      toast.success("Kullanıcı güncellendi.")
       await loadPanelData()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Kullanıcı güncellenemedi.")

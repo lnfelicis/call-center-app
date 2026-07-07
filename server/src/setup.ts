@@ -18,6 +18,22 @@ import {
 
 const superAdminRoleId = "00000000-0000-4000-8000-000000000001";
 const superAdminUserId = "00000000-0000-4000-8000-000000000002";
+const defaultOptionColors: Record<string, string> = {
+  open: "#2563eb",
+  in_progress: "#7c3aed",
+  waiting: "#d97706",
+  follow_up: "#0891b2",
+  transferred: "#4f46e5",
+  resolved: "#16a34a",
+  closed: "#64748b",
+  cancelled: "#dc2626",
+  duplicate: "#9333ea",
+  archived: "#475569",
+  low: "#16a34a",
+  normal: "#2563eb",
+  high: "#ea580c",
+  urgent: "#dc2626",
+};
 
 async function ensureDatabaseExists() {
   const database = process.env.DB_NAME;
@@ -56,6 +72,16 @@ async function runSchema() {
 
   try {
     await db.query("ALTER TABLE call_form_options ADD COLUMN value VARCHAR(80) NULL AFTER label");
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+
+    if (code !== "ER_DUP_FIELDNAME") {
+      throw error;
+    }
+  }
+
+  try {
+    await db.query("ALTER TABLE call_form_options ADD COLUMN color VARCHAR(16) NULL AFTER value");
   } catch (error) {
     const code = (error as { code?: string }).code;
 
@@ -103,14 +129,18 @@ async function seedSuperAdminRole() {
 
 async function seedCallFormOptions() {
   for (const option of [...defaultCallFormOptions, ...extendedCallFormOptions]) {
+    const value = "value" in option && typeof option.value === "string" ? option.value : option.label;
+    const color = defaultOptionColors[value] ?? null;
+
     await db.query(
-      `INSERT INTO call_form_options (id, option_type, label, value, is_active, sort_order)
-      VALUES (UUID(), ?, ?, ?, 1, ?)
+      `INSERT INTO call_form_options (id, option_type, label, value, color, is_active, sort_order)
+      VALUES (UUID(), ?, ?, ?, ?, 1, ?)
       ON DUPLICATE KEY UPDATE
         value = VALUES(value),
+        color = COALESCE(call_form_options.color, VALUES(color)),
         is_active = 1,
         sort_order = VALUES(sort_order)`,
-      [option.type, option.label, "value" in option ? option.value : option.label, option.sortOrder],
+      [option.type, option.label, value, color, option.sortOrder],
     );
   }
 }

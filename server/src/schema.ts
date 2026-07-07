@@ -115,6 +115,7 @@ export const schemaStatements = [
     option_type ENUM('interaction_type', 'issue_category', 'issue_sub_category', 'status', 'priority', 'resolution_category') NOT NULL,
     label VARCHAR(140) NOT NULL,
     value VARCHAR(80) NULL,
+    color VARCHAR(16) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

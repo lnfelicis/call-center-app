@@ -74,6 +74,7 @@ type CallOptionRow = RowDataPacket & {
   option_type: CallOptionType;
   label: string;
   value: string | null;
+  color: string | null;
   is_active: 0 | 1;
   sort_order: number;
 };
@@ -120,6 +121,7 @@ function serializeOption(row: CallOptionRow) {
     type: row.option_type,
     label: row.label,
     value: row.value ?? row.label,
+    color: row.color,
     isActive: row.is_active === 1,
     sortOrder: row.sort_order,
   };
@@ -298,6 +300,20 @@ function normalizeRequiredString(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function normalizeOptionColor(type: string, value: unknown) {
+  if (type !== "status" && type !== "priority") {
+    return null;
+  }
+
+  const color = normalizeRequiredString(value);
+
+  if (!color) {
+    return null;
+  }
+
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : "";
+}
+
 function createSystemValue(label: string) {
   return label
     .trim()
@@ -424,7 +440,7 @@ callRoutes.get(
   requireAnyPermission(["calls.create", "calls.edit", "calls.resolve", "settings.manage"]),
   async (_req, res) => {
     const [rows] = await db.query<CallOptionRow[]>(
-      `SELECT id, option_type, label, value, is_active, sort_order
+      `SELECT id, option_type, label, value, color, is_active, sort_order
       FROM call_form_options
       WHERE option_type <> 'issue_sub_category'
       ORDER BY option_type ASC, sort_order ASC, label ASC`,
@@ -439,6 +455,7 @@ callRoutes.post("/call-options", requirePermission("settings.manage"), async (re
   const type = String(req.body.type ?? "");
   const label = normalizeRequiredString(req.body.label);
   const value = normalizeOptionalString(req.body.value) ?? createOptionValue(type, label);
+  const color = normalizeOptionColor(type, req.body.color);
   const sortOrder = Number(req.body.sortOrder) || 0;
 
   if (!allowedOptionTypes.includes(type)) {
@@ -451,16 +468,21 @@ callRoutes.post("/call-options", requirePermission("settings.manage"), async (re
     return;
   }
 
+  if (color === "") {
+    res.status(400).json({ message: "Renk değeri #RRGGBB formatında olmalıdır." });
+    return;
+  }
+
   await db.query(
-    `INSERT INTO call_form_options (id, option_type, label, value, is_active, sort_order)
-    VALUES (?, ?, ?, ?, 1, ?)`,
-    [randomUUID(), type, label, value, sortOrder],
+    `INSERT INTO call_form_options (id, option_type, label, value, color, is_active, sort_order)
+    VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    [randomUUID(), type, label, value, color, sortOrder],
   );
   await writeAuditLog({
     req,
     action: "call_option.create",
     entityType: "call_form_option",
-    metadata: { type, label, value },
+    metadata: { type, label, value, color },
   });
 
   res.status(201).json({ ok: true });
@@ -477,9 +499,15 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
   for (const option of options) {
     const label = normalizeRequiredString(option.label);
     const type = String(option.type ?? "");
+    const color = normalizeOptionColor(type, option.color);
 
     if (!option.id || !allowedOptionTypes.includes(type) || label.length < 2) {
       res.status(400).json({ message: "Seçenek listesinde geçersiz kayıt var." });
+      return;
+    }
+
+    if (color === "") {
+      res.status(400).json({ message: "Renk değeri #RRGGBB formatında olmalıdır." });
       return;
     }
   }
@@ -493,14 +521,16 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
       const label = normalizeRequiredString(option.label);
       const type = String(option.type ?? "");
       const value = normalizeOptionalString(option.value) ?? createOptionValue(type, label);
+      const color = normalizeOptionColor(type, option.color);
 
       await connection.query(
         `UPDATE call_form_options
-        SET label = ?, value = ?, is_active = ?, sort_order = ?
+        SET label = ?, value = ?, color = ?, is_active = ?, sort_order = ?
         WHERE id = ? AND option_type = ?`,
         [
           label,
           value,
+          color,
           Boolean(option.isActive) ? 1 : 0,
           Number(option.sortOrder) || 0,
           String(option.id),
@@ -530,7 +560,9 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
 callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), async (req, res) => {
   const optionId = String(req.params.id ?? "");
   const label = normalizeRequiredString(req.body.label);
-  const value = normalizeOptionalString(req.body.value) ?? createOptionValue(String(req.body.type ?? ""), label);
+  const type = String(req.body.type ?? "");
+  const value = normalizeOptionalString(req.body.value) ?? createOptionValue(type, label);
+  const color = normalizeOptionColor(type, req.body.color);
   const isActive = Boolean(req.body.isActive);
   const sortOrder = Number(req.body.sortOrder) || 0;
 
@@ -539,11 +571,16 @@ callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), asyn
     return;
   }
 
+  if (color === "") {
+    res.status(400).json({ message: "Renk değeri #RRGGBB formatında olmalıdır." });
+    return;
+  }
+
   const [result] = await db.query<ResultSetHeader>(
     `UPDATE call_form_options
-    SET label = ?, value = ?, is_active = ?, sort_order = ?
+    SET label = ?, value = ?, color = ?, is_active = ?, sort_order = ?
     WHERE id = ?`,
-    [label, value, isActive ? 1 : 0, sortOrder, optionId],
+    [label, value, color, isActive ? 1 : 0, sortOrder, optionId],
   );
 
   if (result.affectedRows === 0) {
@@ -556,7 +593,7 @@ callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), asyn
     action: "call_option.update",
     entityType: "call_form_option",
     entityId: optionId,
-    metadata: { label, value, isActive, sortOrder },
+    metadata: { label, value, color, isActive, sortOrder },
   });
 
   res.json({ ok: true });

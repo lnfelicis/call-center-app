@@ -1,5 +1,8 @@
+import ExcelJS from "exceljs";
 import { Router } from "express";
+import { existsSync } from "node:fs";
 import type { RowDataPacket } from "mysql2";
+import PDFDocument from "pdfkit";
 import { requireAnyPermission, requireAuth, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { writeAuditLog } from "../audit.js";
 import { db } from "../db.js";
@@ -48,6 +51,31 @@ type ReportFilterOptionRow = RowDataPacket & {
   color: string | null;
   sort_order: number;
 };
+
+type ReportCall = ReturnType<typeof serializeSearchRow>;
+
+type ExportColumn = {
+  key: string;
+  header: string;
+  width: number;
+  pdfWidth: number;
+  value: (row: ReportCall, labels: ReportOptionLabelMap) => string;
+};
+
+type PdfFonts = {
+  regular: string;
+  bold: string;
+};
+
+type ReportOptionLabelMap = {
+  priority: Map<string, string>;
+  status: Map<string, string>;
+};
+
+const pdfRegularFont = "AppRegular";
+const pdfBoldFont = "AppBold";
+const windowsRegularFontPath = "C:/Windows/Fonts/arial.ttf";
+const windowsBoldFontPath = "C:/Windows/Fonts/arialbd.ttf";
 
 export const reportRoutes = Router();
 
@@ -405,8 +433,13 @@ reportRoutes.get(
   async (req: AuthenticatedRequest, res) => {
     const format = normalizeText(req.query.format) === "pdf" ? "pdf" : "excel";
     const rows = (await searchCalls(req, 1000)).map((row) => serializeSearchRow(req, row));
-    const fileName = `cagri-raporu-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "csv"}`;
-    const content = format === "pdf" ? createPdf(rows) : Buffer.from(createCsv(rows), "utf8");
+    const labels = await getReportOptionLabelMap();
+    const createdAt = new Date();
+    const summary = createExportSummary(req, rows.length, createdAt, labels);
+    const fileName = `cagri-raporu-${createdAt.toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`;
+    const content = format === "pdf"
+      ? await createPdf(rows, summary, labels)
+      : await createExcel(rows, summary, labels);
 
     await writeAuditLog({
       req,
@@ -417,67 +450,396 @@ reportRoutes.get(
 
     res.json({
       fileName,
-      mimeType: format === "pdf" ? "application/pdf" : "text/csv;charset=utf-8",
+      mimeType: format === "pdf"
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       content: content.toString("base64"),
     });
   },
 );
 
-function createCsv(rows: ReturnType<typeof serializeSearchRow>[]) {
-  const headers = [
-    "Kayit No",
-    "Telefon",
-    "TC",
-    "Ogrenci",
-    "Kategori",
-    "Durum",
-    "Oncelik",
-    "Acan",
-    "Atanan",
-    "Cozum Yetkilisi",
-    "Kayit Tarihi",
-  ];
-  const body = rows.map((row) => [
-    row.recordNumber,
-    row.phoneNumber,
-    row.studentTc ?? "",
-    row.studentName ?? "",
-    row.category,
-    row.status,
-    row.priority,
-    row.openedByName,
-    row.assignedToName ?? "",
-    row.resolvedByName ?? "",
-    row.createdAt,
-  ]);
+const exportColumns: ExportColumn[] = [
+  {
+    key: "recordNumber",
+    header: "Kayıt No",
+    width: 30,
+    pdfWidth: 120,
+    value: (row) => row.recordNumber,
+  },
+  {
+    key: "phoneNumber",
+    header: "Telefon",
+    width: 18,
+    pdfWidth: 58,
+    value: (row) => row.phoneNumber,
+  },
+  {
+    key: "studentTc",
+    header: "TC",
+    width: 16,
+    pdfWidth: 54,
+    value: (row) => row.studentTc ?? "",
+  },
+  {
+    key: "studentName",
+    header: "Öğrenci",
+    width: 24,
+    pdfWidth: 78,
+    value: (row) => row.studentName ?? "",
+  },
+  {
+    key: "category",
+    header: "Kategori",
+    width: 22,
+    pdfWidth: 72,
+    value: (row) => row.category,
+  },
+  {
+    key: "status",
+    header: "Durum",
+    width: 16,
+    pdfWidth: 50,
+    value: (row, labels) => getOptionLabel(labels.status, row.status),
+  },
+  {
+    key: "priority",
+    header: "Öncelik",
+    width: 14,
+    pdfWidth: 42,
+    value: (row, labels) => getOptionLabel(labels.priority, row.priority),
+  },
+  {
+    key: "openedByName",
+    header: "Açan",
+    width: 22,
+    pdfWidth: 68,
+    value: (row) => row.openedByName,
+  },
+  {
+    key: "resolvedByName",
+    header: "Çözüm Yetkilisi",
+    width: 22,
+    pdfWidth: 70,
+    value: (row) => row.resolvedByName ?? "",
+  },
+  {
+    key: "createdAt",
+    header: "Kayıt Tarihi",
+    width: 22,
+    pdfWidth: 60,
+    value: (row) => formatDateTime(row.createdAt),
+  },
+];
 
-  return [headers, ...body]
-    .map((line) => line.map((value) => `"${String(value).replaceAll("\"", "\"\"")}"`).join(","))
-    .join("\n");
+async function getReportOptionLabelMap(): Promise<ReportOptionLabelMap> {
+  const [rows] = await db.query<ReportFilterOptionRow[]>(
+    `SELECT id, option_type, label, value, color, sort_order
+    FROM call_form_options
+    WHERE is_active = 1 AND option_type IN ('status', 'priority')
+    ORDER BY option_type ASC, sort_order ASC, label ASC`,
+  );
+  const labels: ReportOptionLabelMap = {
+    priority: new Map<string, string>(),
+    status: new Map<string, string>(),
+  };
+
+  rows.forEach((row) => {
+    if (row.option_type === "priority" || row.option_type === "status") {
+      labels[row.option_type].set(row.value ?? row.label, row.label);
+    }
+  });
+
+  return labels;
 }
 
-function createPdf(rows: ReturnType<typeof serializeSearchRow>[]) {
-  const lines = [
-    "Call Center Cagri Raporu",
-    `Olusturma: ${new Date().toLocaleString("tr-TR")}`,
-    `Kayit sayisi: ${rows.length}`,
-    "",
-    ...rows.slice(0, 120).map((row) => `${row.recordNumber} | ${row.status} | ${row.category} | ${row.openedByName}`),
-  ];
-  const escapedText = lines
-    .map((line, index) => `BT /F1 10 Tf 40 ${800 - index * 14} Td (${line.replace(/[()\\]/g, "\\$&")}) Tj ET`)
-    .join("\n");
-  const stream = Buffer.from(escapedText, "utf8");
-  const chunks = [
-    "%PDF-1.4\n",
-    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
-    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n",
-    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
-    `5 0 obj << /Length ${stream.length} >> stream\n${stream.toString("utf8")}\nendstream endobj\n`,
-    "xref\n0 6\n0000000000 65535 f \n",
-    "trailer << /Root 1 0 R /Size 6 >>\nstartxref\n0\n%%EOF",
-  ];
+function getOptionLabel(labels: Map<string, string>, value: string) {
+  return labels.get(value) ?? value;
+}
 
-  return Buffer.from(chunks.join(""), "utf8");
+function createExportSummary(
+  req: AuthenticatedRequest,
+  rowCount: number,
+  createdAt: Date,
+  labels: ReportOptionLabelMap,
+) {
+  const filters = [
+    ["Telefon", normalizePhone(req.query.phoneNumber)],
+    ["TC", normalizeText(req.query.studentTc)],
+    ["Öğrenci", normalizeText(req.query.studentName)],
+    ["Kayıt No", normalizeText(req.query.recordNumber)],
+    ["Kategori", normalizeText(req.query.category)],
+    ["Durum", getOptionLabel(labels.status, normalizeText(req.query.status))],
+    ["Öncelik", getOptionLabel(labels.priority, normalizeText(req.query.priority))],
+    ["Kaydı açan", normalizeText(req.query.openedByUserId)],
+    ["Çözüm yetkilisi", normalizeText(req.query.resolvedByUserId)],
+    ["Kayıt başlangıç", normalizeDate(req.query.dateFrom)],
+    ["Kayıt bitiş", normalizeDate(req.query.dateTo)],
+    ["Takip başlangıç", normalizeDate(req.query.followUpFrom)],
+    ["Takip bitiş", normalizeDate(req.query.followUpTo)],
+    ["SLA", normalizeText(req.query.slaStatus)],
+  ]
+    .filter(([, value]) => value && value !== "all")
+    .map(([label, value]) => `${label}: ${value}`);
+
+  return {
+    title: "Call Center Çağrı Raporu",
+    createdAt,
+    rowCount,
+    filters,
+  };
+}
+
+async function createExcel(
+  rows: ReportCall[],
+  summary: ReturnType<typeof createExportSummary>,
+  labels: ReportOptionLabelMap,
+) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Call Center App";
+  workbook.created = summary.createdAt;
+
+  const worksheet = workbook.addWorksheet("Çağrı Raporu", {
+    views: [{ state: "frozen", ySplit: 7 }],
+  });
+
+  worksheet.columns = exportColumns.map((column) => ({
+    key: column.key,
+    width: column.width,
+  }));
+
+  worksheet.mergeCells(1, 1, 1, exportColumns.length);
+  worksheet.getCell("A1").value = summary.title;
+  worksheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+  worksheet.getCell("A1").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF1F4E79" },
+  };
+  worksheet.getCell("A1").alignment = { vertical: "middle" };
+  worksheet.getRow(1).height = 24;
+
+  worksheet.getCell("A3").value = "Oluşturma";
+  worksheet.getCell("B3").value = formatDateTime(summary.createdAt);
+  worksheet.getCell("A4").value = "Kayıt sayısı";
+  worksheet.getCell("B4").value = summary.rowCount;
+  worksheet.getCell("A5").value = "Aktif filtreler";
+  worksheet.getCell("B5").value = summary.filters.length > 0 ? summary.filters.join(" | ") : "Yok";
+
+  for (const cellAddress of ["A3", "A4", "A5"]) {
+    worksheet.getCell(cellAddress).font = { bold: true };
+  }
+
+  const headerRow = worksheet.getRow(7);
+  headerRow.values = exportColumns.map((column) => column.header);
+  headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  headerRow.alignment = { vertical: "middle", wrapText: true };
+  headerRow.height = 22;
+
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF2F5597" },
+    };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFD9E2F3" } },
+      left: { style: "thin", color: { argb: "FFD9E2F3" } },
+      bottom: { style: "thin", color: { argb: "FFD9E2F3" } },
+      right: { style: "thin", color: { argb: "FFD9E2F3" } },
+    };
+  });
+
+  rows.forEach((row) => {
+    const excelRow = worksheet.addRow(exportColumns.map((column) => column.value(row, labels)));
+    excelRow.alignment = { vertical: "top", wrapText: false };
+  });
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= 7) {
+      return;
+    }
+
+    row.eachCell((cell) => {
+      cell.border = {
+        bottom: { style: "hair", color: { argb: "FFE7E6E6" } },
+      };
+    });
+  });
+
+  worksheet.autoFilter = {
+    from: { row: 7, column: 1 },
+    to: { row: 7, column: exportColumns.length },
+  };
+
+  const content = await workbook.xlsx.writeBuffer();
+
+  return Buffer.from(content);
+}
+
+async function createPdf(
+  rows: ReportCall[],
+  summary: ReturnType<typeof createExportSummary>,
+  labels: ReportOptionLabelMap,
+) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({
+      bufferPages: true,
+      layout: "landscape",
+      margin: 28,
+      size: "A4",
+    });
+    const chunks: Buffer[] = [];
+    const fonts = registerPdfFonts(doc);
+
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("error", reject);
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+
+    drawPdfHeader(doc, summary, fonts);
+    drawPdfTableHeader(doc, fonts);
+
+    rows.forEach((row, index) => {
+      drawPdfRow(doc, row, index, fonts, labels);
+    });
+
+    drawPdfPageNumbers(doc, fonts);
+    doc.end();
+  });
+}
+
+function drawPdfHeader(
+  doc: PDFKit.PDFDocument,
+  summary: ReturnType<typeof createExportSummary>,
+  fonts: PdfFonts,
+) {
+  doc
+    .font(fonts.bold)
+    .fontSize(16)
+    .fillColor("#1f2937")
+    .text(summary.title, { continued: false });
+
+  doc.moveDown(0.35);
+  doc
+    .font(fonts.regular)
+    .fontSize(9)
+    .fillColor("#4b5563")
+    .text(`Oluşturma: ${formatDateTime(summary.createdAt)}`)
+    .text(`Kayıt sayısı: ${summary.rowCount}`)
+    .text(`Aktif filtreler: ${summary.filters.length > 0 ? summary.filters.join(" | ") : "Yok"}`, {
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+    });
+
+  doc.moveDown(0.8);
+}
+
+function drawPdfTableHeader(doc: PDFKit.PDFDocument, fonts: PdfFonts) {
+  const left = doc.page.margins.left;
+  const y = doc.y;
+  const height = 20;
+  let x = left;
+
+  doc.rect(left, y, getPdfTableWidth(), height).fill("#1f4e79");
+  doc.font(fonts.bold).fontSize(7).fillColor("#ffffff");
+
+  exportColumns.forEach((column) => {
+    doc.text(column.header, x + 3, y + 6, {
+      width: column.pdfWidth - 6,
+      height: height - 6,
+      lineBreak: false,
+    });
+    x += column.pdfWidth;
+  });
+
+  doc.y = y + height;
+}
+
+function drawPdfRow(
+  doc: PDFKit.PDFDocument,
+  row: ReportCall,
+  index: number,
+  fonts: PdfFonts,
+  labels: ReportOptionLabelMap,
+) {
+  const rowHeight = 22;
+
+  if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom - 20) {
+    doc.addPage();
+    drawPdfTableHeader(doc, fonts);
+  }
+
+  const left = doc.page.margins.left;
+  const y = doc.y;
+  let x = left;
+
+  doc.rect(left, y, getPdfTableWidth(), rowHeight).fill(index % 2 === 0 ? "#ffffff" : "#f8fafc");
+  doc.strokeColor("#e5e7eb").lineWidth(0.5).moveTo(left, y + rowHeight).lineTo(left + getPdfTableWidth(), y + rowHeight).stroke();
+  doc.font(fonts.regular).fontSize(6.5).fillColor("#111827");
+
+  exportColumns.forEach((column) => {
+    const value = column.value(row, labels);
+    const text = column.key === "recordNumber"
+      ? value
+      : truncateForPdf(doc, value, column.pdfWidth - 6);
+
+    doc.text(text, x + 3, y + 6, {
+      width: column.pdfWidth - 6,
+      height: rowHeight - 8,
+      lineBreak: false,
+    });
+    x += column.pdfWidth;
+  });
+
+  doc.y = y + rowHeight;
+}
+
+function drawPdfPageNumbers(doc: PDFKit.PDFDocument, fonts: PdfFonts) {
+  const range = doc.bufferedPageRange();
+
+  for (let index = range.start; index < range.start + range.count; index += 1) {
+    doc.switchToPage(index);
+    doc.font(fonts.regular).fontSize(8).fillColor("#6b7280").text(
+      `Sayfa ${index + 1} / ${range.count}`,
+      doc.page.margins.left,
+      doc.page.height - doc.page.margins.bottom + 8,
+      {
+        align: "right",
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      },
+    );
+  }
+}
+
+function getPdfTableWidth() {
+  return exportColumns.reduce((total, column) => total + column.pdfWidth, 0);
+}
+
+function registerPdfFonts(doc: PDFKit.PDFDocument): PdfFonts {
+  if (existsSync(windowsRegularFontPath) && existsSync(windowsBoldFontPath)) {
+    doc.registerFont(pdfRegularFont, windowsRegularFontPath);
+    doc.registerFont(pdfBoldFont, windowsBoldFontPath);
+    return { regular: pdfRegularFont, bold: pdfBoldFont };
+  }
+
+  return { regular: "Helvetica", bold: "Helvetica-Bold" };
+}
+
+function truncateForPdf(doc: PDFKit.PDFDocument, value: string, width: number) {
+  if (doc.widthOfString(value) <= width) {
+    return value;
+  }
+
+  let text = value;
+
+  while (text.length > 1 && doc.widthOfString(`${text}...`) > width) {
+    text = text.slice(0, -1);
+  }
+
+  return `${text}...`;
+}
+
+function formatDateTime(value: string | Date) {
+  return new Intl.DateTimeFormat("tr-TR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

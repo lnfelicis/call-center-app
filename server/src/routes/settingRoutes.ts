@@ -4,11 +4,11 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { requireAuth, requirePermission } from "../auth.js";
 import { writeAuditLog } from "../audit.js";
 import { db } from "../db.js";
+import { readAppSetting, writeAppSetting } from "../settings.js";
 
 type OptionType =
   | "interaction_type"
   | "issue_category"
-  | "issue_sub_category"
   | "status"
   | "priority"
   | "resolution_category";
@@ -36,7 +36,6 @@ type FieldRow = RowDataPacket & {
 const allowedOptionTypes = [
   "interaction_type",
   "issue_category",
-  "issue_sub_category",
   "status",
   "priority",
   "resolution_category",
@@ -79,10 +78,34 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function createSystemValue(label: string) {
+  return label
+    .trim()
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ı", "i")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function createOptionValue(type: OptionType, label: string) {
+  if (type === "status" || type === "priority") {
+    return createSystemValue(label) || label;
+  }
+
+  return label;
+}
+
 async function readSettings() {
   const [optionRows] = await db.query<OptionRow[]>(
     `SELECT id, option_type, label, value, is_active, sort_order
     FROM call_form_options
+    WHERE option_type <> 'issue_sub_category'
     ORDER BY option_type ASC, sort_order ASC, label ASC`,
   );
   const [fieldRows] = await db.query<FieldRow[]>(
@@ -99,6 +122,46 @@ async function readSettings() {
 
 settingRoutes.get("/settings", requirePermission("settings.manage"), async (_req, res) => {
   res.json(await readSettings());
+});
+
+settingRoutes.get("/settings/security", requirePermission("settings.manage"), async (_req, res) => {
+  res.json({
+    security: await readAppSetting("security_settings"),
+    notifications: await readAppSetting("notification_settings"),
+    privacy: await readAppSetting("privacy_settings"),
+  });
+});
+
+settingRoutes.patch("/settings/security", requirePermission("settings.manage"), async (req, res) => {
+  const security = await writeAppSetting("security_settings", {
+    sessionDurationMinutes: Math.max(15, Math.min(1440, Number(req.body.security?.sessionDurationMinutes) || 480)),
+    failedLoginLimit: Math.max(1, Math.min(20, Number(req.body.security?.failedLoginLimit) || 5)),
+    ipAllowlist: Array.isArray(req.body.security?.ipAllowlist)
+      ? req.body.security.ipAllowlist.map((value: unknown) => normalizeText(value)).filter(Boolean)
+      : [],
+  });
+  const notifications = await writeAppSetting("notification_settings", {
+    panelEnabled: req.body.notifications?.panelEnabled !== false,
+    emailEnabled: req.body.notifications?.emailEnabled === true,
+    followUpReminderEnabled: req.body.notifications?.followUpReminderEnabled !== false,
+    urgentNotificationEnabled: req.body.notifications?.urgentNotificationEnabled !== false,
+    staleCallNotificationEnabled: req.body.notifications?.staleCallNotificationEnabled !== false,
+    staleCallHours: Math.max(1, Math.min(720, Number(req.body.notifications?.staleCallHours) || 24)),
+  });
+  const privacy = await writeAppSetting("privacy_settings", {
+    retentionDays: Math.max(30, Math.min(3650, Number(req.body.privacy?.retentionDays) || 1095)),
+    archiveResolvedAfterDays: Math.max(1, Math.min(3650, Number(req.body.privacy?.archiveResolvedAfterDays) || 180)),
+    anonymizeArchivedAfterDays: Math.max(1, Math.min(3650, Number(req.body.privacy?.anonymizeArchivedAfterDays) || 365)),
+  });
+
+  await writeAuditLog({
+    req,
+    action: "settings.security.update",
+    entityType: "settings",
+    metadata: { security, notifications, privacy },
+  });
+
+  res.json({ security, notifications, privacy });
 });
 
 settingRoutes.patch("/settings", requirePermission("settings.manage"), async (req, res) => {
@@ -144,7 +207,7 @@ settingRoutes.patch("/settings", requirePermission("settings.manage"), async (re
     for (const option of options) {
       const type = normalizeOptionType(option.type);
       const label = normalizeText(option.label);
-      const value = normalizeText(option.value) || label;
+      const value = type ? normalizeText(option.value) || createOptionValue(type, label) : "";
 
       if (!option.id || !type || label.length < 2) {
         res.status(400).json({ message: "Seçenek ayarlarında geçersiz kayıt var." });
@@ -213,7 +276,7 @@ settingRoutes.post(
   async (req, res) => {
     const type = normalizeOptionType(req.params.type);
     const label = normalizeText(req.body.label);
-    const value = normalizeText(req.body.value) || label;
+    const value = type ? normalizeText(req.body.value) || createOptionValue(type, label) : "";
     const sortOrder = Number(req.body.sortOrder) || 0;
 
     if (!type) {
@@ -251,7 +314,7 @@ settingRoutes.patch(
     const type = normalizeOptionType(req.params.type);
     const optionId = String(req.params.id ?? "");
     const label = normalizeText(req.body.label);
-    const value = normalizeText(req.body.value) || label;
+    const value = type ? normalizeText(req.body.value) || createOptionValue(type, label) : "";
 
     if (!type) {
       res.status(400).json({ message: "Geçersiz seçenek türü." });

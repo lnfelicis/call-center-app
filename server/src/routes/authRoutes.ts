@@ -4,11 +4,13 @@ import { db } from "../db.js";
 import { getUserWithPermissions, requireAuth, type AuthenticatedRequest } from "../auth.js";
 import { signToken, verifyPassword } from "../security.js";
 import { writeAuditLog } from "../audit.js";
+import { readAppSetting } from "../settings.js";
 
 type LoginUserRow = RowDataPacket & {
   id: string;
   password_hash: string;
   status: "active" | "passive";
+  failed_login_attempts: number;
 };
 
 export const authRoutes = Router();
@@ -22,14 +24,37 @@ authRoutes.post("/login", async (req, res) => {
     return;
   }
 
+  const securitySettings = await readAppSetting("security_settings");
+  const requestIp = req.ip ?? "";
+
+  if (
+    securitySettings.ipAllowlist.length > 0 &&
+    !securitySettings.ipAllowlist.includes(requestIp)
+  ) {
+    res.status(403).json({ message: "Bu IP adresinden girişe izin verilmiyor." });
+    return;
+  }
+
   const [rows] = await db.query<LoginUserRow[]>(
-    "SELECT id, password_hash, status FROM users WHERE username = ? OR email = ? LIMIT 1",
+    "SELECT id, password_hash, status, failed_login_attempts FROM users WHERE username = ? OR email = ? LIMIT 1",
     [username, username],
   );
   const user = rows[0];
 
   if (!user || user.status !== "active") {
     res.status(401).json({ message: "Kullanıcı adı veya şifre hatalı." });
+    return;
+  }
+
+  if (user.failed_login_attempts >= securitySettings.failedLoginLimit) {
+    await writeAuditLog({
+      req,
+      action: "auth.login.blocked",
+      entityType: "user",
+      entityId: user.id,
+      metadata: { reason: "failed_login_limit" },
+    });
+    res.status(423).json({ message: "Hatalı giriş limiti aşıldı. Yönetici ile iletişime geçin." });
     return;
   }
 
@@ -63,7 +88,7 @@ authRoutes.post("/login", async (req, res) => {
   });
 
   res.json({
-    token: signToken(user.id),
+    token: signToken(user.id, securitySettings.sessionDurationMinutes),
     user: authUser,
   });
 });

@@ -1,48 +1,48 @@
-import { useState } from "react"
-import type { FormEvent, ReactNode } from "react"
-import { Check, Pencil, UserPlus, X } from "lucide-react"
+import { useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import { Check, Pencil, UserPlus, X } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { isPasswordValid, passwordRequirements } from "@/lib/password"
-import type { ManagedUser, Role, UserForm } from "@/types"
+} from "@/components/ui/select";
+import { isPasswordValid, passwordRequirements } from "@/lib/password";
+import type { ManagedUser, Role, UserForm } from "@/types";
 
 type UsersModuleProps = {
-  users: ManagedUser[]
-  roles: Role[]
-  userForm: UserForm
-  isLoading: boolean
-  onUserFormChange: (form: UserForm) => void
-  onCreateUser: (event: FormEvent<HTMLFormElement>) => void
+  users: ManagedUser[];
+  roles: Role[];
+  userForm: UserForm;
+  isLoading: boolean;
+  onUserFormChange: (form: UserForm) => void;
+  onCreateUser: (event: FormEvent<HTMLFormElement>) => void;
   onUpdateUser: (
     userId: string,
     payload: Pick<ManagedUser, "fullName" | "email" | "roleId" | "status">,
-  ) => void
-}
+  ) => void;
+};
 
 export function UsersModule({
   users,
@@ -53,14 +53,14 @@ export function UsersModule({
   onCreateUser,
   onUpdateUser,
 }: UsersModuleProps) {
-  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null)
-  const passwordIsValid = isPasswordValid(userForm.password)
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const passwordIsValid = isPasswordValid(userForm.password);
   const userCanBeCreated =
     userForm.username.trim() &&
     userForm.fullName.trim() &&
     userForm.email.trim() &&
     userForm.roleId &&
-    passwordIsValid
+    passwordIsValid;
 
   return (
     <div className="grid items-start gap-4 xl:grid-cols-2">
@@ -79,7 +79,10 @@ export function UsersModule({
                   id="new-username"
                   value={userForm.username}
                   onChange={(event) =>
-                    onUserFormChange({ ...userForm, username: event.target.value })
+                    onUserFormChange({
+                      ...userForm,
+                      username: event.target.value,
+                    })
                   }
                 />
               </Field>
@@ -88,7 +91,10 @@ export function UsersModule({
                   id="new-full-name"
                   value={userForm.fullName}
                   onChange={(event) =>
-                    onUserFormChange({ ...userForm, fullName: event.target.value })
+                    onUserFormChange({
+                      ...userForm,
+                      fullName: event.target.value,
+                    })
                   }
                 />
               </Field>
@@ -99,14 +105,18 @@ export function UsersModule({
                   id="new-email"
                   type="email"
                   value={userForm.email}
-                  onChange={(event) => onUserFormChange({ ...userForm, email: event.target.value })}
+                  onChange={(event) =>
+                    onUserFormChange({ ...userForm, email: event.target.value })
+                  }
                 />
               </Field>
               <div className="grid gap-2">
                 <Label htmlFor="new-role">Rol</Label>
                 <Select
                   value={userForm.roleId}
-                  onValueChange={(roleId) => onUserFormChange({ ...userForm, roleId })}
+                  onValueChange={(roleId) =>
+                    onUserFormChange({ ...userForm, roleId })
+                  }
                 >
                   <SelectTrigger id="new-role" className="w-full">
                     <SelectValue placeholder="Rol seçin" />
@@ -127,11 +137,19 @@ export function UsersModule({
                 id="new-password"
                 type="password"
                 value={userForm.password}
-                onChange={(event) => onUserFormChange({ ...userForm, password: event.target.value })}
+                onChange={(event) =>
+                  onUserFormChange({
+                    ...userForm,
+                    password: event.target.value,
+                  })
+                }
               />
-              <div className="flex flex-wrap gap-1.5" aria-label="Şifre gereksinimleri">
+              <div
+                className="flex flex-wrap gap-1.5"
+                aria-label="Şifre gereksinimleri"
+              >
                 {passwordRequirements.map((requirement) => {
-                  const passes = requirement.test(userForm.password)
+                  const passes = requirement.test(userForm.password);
 
                   return (
                     <Badge
@@ -139,10 +157,14 @@ export function UsersModule({
                       variant={passes ? "secondary" : "outline"}
                       className="gap-1"
                     >
-                      {passes ? <Check className="size-3" /> : <X className="size-3" />}
+                      {passes ? (
+                        <Check className="size-3" />
+                      ) : (
+                        <X className="size-3" />
+                      )}
                       {requirement.label}
                     </Badge>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -167,13 +189,15 @@ export function UsersModule({
                 key={user.id}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <Avatar className="rounded-lg">
-                    <AvatarFallback className="rounded-lg">
+                  <Avatar>
+                    <AvatarFallback>
                       {user.fullName.slice(0, 1).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <strong className="block truncate text-sm font-medium">{user.fullName}</strong>
+                    <strong className="block truncate text-sm font-medium">
+                      {user.fullName}
+                    </strong>
                     <span className="block truncate text-sm text-muted-foreground">
                       {user.username} · {user.email}
                     </span>
@@ -181,10 +205,17 @@ export function UsersModule({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline">{user.roleName}</Badge>
-                  <Badge variant={user.status === "active" ? "secondary" : "outline"}>
+                  <Badge
+                    variant={user.status === "active" ? "secondary" : "outline"}
+                  >
                     {user.status === "active" ? "Aktif" : "Pasif"}
                   </Badge>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setEditingUser(user)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditingUser(user)}
+                  >
                     <Pencil />
                     Düzenle
                   </Button>
@@ -195,7 +226,10 @@ export function UsersModule({
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
+      <Dialog
+        open={Boolean(editingUser)}
+        onOpenChange={(open) => !open && setEditingUser(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Kullanıcıyı düzenle</DialogTitle>
@@ -204,14 +238,14 @@ export function UsersModule({
             <form
               className="grid gap-4"
               onSubmit={(event) => {
-                event.preventDefault()
+                event.preventDefault();
                 onUpdateUser(editingUser.id, {
                   fullName: editingUser.fullName,
                   email: editingUser.email,
                   roleId: editingUser.roleId,
                   status: editingUser.status,
-                })
-                setEditingUser(null)
+                });
+                setEditingUser(null);
               }}
             >
               <div className="grid gap-3 sm:grid-cols-2">
@@ -221,7 +255,9 @@ export function UsersModule({
                     value={editingUser.fullName}
                     onChange={(event) =>
                       setEditingUser((current) =>
-                        current ? { ...current, fullName: event.target.value } : current,
+                        current
+                          ? { ...current, fullName: event.target.value }
+                          : current,
                       )
                     }
                   />
@@ -233,7 +269,9 @@ export function UsersModule({
                     value={editingUser.email}
                     onChange={(event) =>
                       setEditingUser((current) =>
-                        current ? { ...current, email: event.target.value } : current,
+                        current
+                          ? { ...current, email: event.target.value }
+                          : current,
                       )
                     }
                   />
@@ -245,7 +283,9 @@ export function UsersModule({
                   <Select
                     value={editingUser.roleId}
                     onValueChange={(roleId) =>
-                      setEditingUser((current) => (current ? { ...current, roleId } : current))
+                      setEditingUser((current) =>
+                        current ? { ...current, roleId } : current,
+                      )
                     }
                   >
                     <SelectTrigger className="w-full">
@@ -267,7 +307,11 @@ export function UsersModule({
                     onValueChange={(status) =>
                       setEditingUser((current) =>
                         current
-                          ? { ...current, status: status === "passive" ? "passive" : "active" }
+                          ? {
+                              ...current,
+                              status:
+                                status === "passive" ? "passive" : "active",
+                            }
                           : current,
                       )
                     }
@@ -283,7 +327,11 @@ export function UsersModule({
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingUser(null)}
+                >
                   Vazgeç
                 </Button>
                 <Button type="submit" disabled={isLoading}>
@@ -295,7 +343,7 @@ export function UsersModule({
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
 
 function Field({
@@ -303,14 +351,14 @@ function Field({
   htmlFor,
   children,
 }: {
-  label: string
-  htmlFor: string
-  children: ReactNode
+  label: string;
+  htmlFor: string;
+  children: ReactNode;
 }) {
   return (
     <div className="grid gap-2">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>
-  )
+  );
 }

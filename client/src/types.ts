@@ -51,23 +51,22 @@ export type UserForm = {
   roleId: string
 }
 
-export type ModuleId = "dashboard" | "users" | "roles" | "calls" | "logs" | "settings"
+export type ModuleId =
+  | "dashboard"
+  | "users"
+  | "roles"
+  | "calls"
+  | "reports"
+  | "notifications"
+  | "logs"
+  | "settings"
 
 export type RequestFn = <T>(path: string, options?: RequestInit) => Promise<T>
 
-export type CallPriority = "low" | "normal" | "high" | "urgent"
+export type CallPriority = string
 
 export type CallStatus =
-  | "open"
-  | "in_progress"
-  | "waiting"
-  | "follow_up"
-  | "transferred"
-  | "resolved"
-  | "closed"
-  | "cancelled"
-  | "duplicate"
-  | "archived"
+  string
 
 export type CallRecord = {
   id: string
@@ -215,4 +214,93 @@ export type AdminDashboard = {
     entityType: string
     createdAt: string
   }>
+}
+
+export type ReportCall = {
+  id: string
+  recordNumber: string
+  phoneNumber: string
+  studentTc: string | null
+  studentName: string | null
+  interactionType: string
+  category: string
+  priority: string
+  status: string
+  needsFollowUp: boolean
+  followUpAt: string | null
+  openedByUserId: string
+  openedByName: string
+  assignedToUserId: string | null
+  assignedToName: string | null
+  resolvedByUserId: string | null
+  resolvedByName: string | null
+  resolvedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ReportsSummary = {
+  summary: {
+    total: number
+    open: number
+    resolved: number
+    followUp: number
+    urgent: number
+  }
+  byStatus: Array<{ label: string; total: number }>
+  byPriority: Array<{ label: string; total: number }>
+}
+
+export type StaffReport = {
+  userId: string
+  fullName: string
+  openedTotal: number
+  resolvedTotal: number
+}
+
+export type CategoryReport = {
+  category: string
+  total: number
+  openTotal: number
+  resolvedTotal: number
+}
+
+export type ReportExport = {
+  fileName: string
+  mimeType: string
+  content: string
+}
+
+export type AppNotification = {
+  id: string
+  title: string
+  message: string
+  type: string
+  channel: "panel" | "email"
+  entityType: string | null
+  entityId: string | null
+  isRead: boolean
+  readAt: string | null
+  createdAt: string
+}
+
+export type SecuritySettings = {
+  sessionDurationMinutes: number
+  failedLoginLimit: number
+  ipAllowlist: string[]
+}
+
+export type NotificationSettings = {
+  panelEnabled: boolean
+  emailEnabled: boolean
+  followUpReminderEnabled: boolean
+  urgentNotificationEnabled: boolean
+  staleCallNotificationEnabled: boolean
+  staleCallHours: number
+}
+
+export type PrivacySettings = {
+  retentionDays: number
+  archiveResolvedAfterDays: number
+  anonymizeArchivedAfterDays: number
 }

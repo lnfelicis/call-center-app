@@ -5,6 +5,8 @@ import { authRoutes } from "./routes/authRoutes.js";
 import { adminRoutes } from "./routes/adminRoutes.js";
 import { callRoutes } from "./routes/callRoutes.js";
 import { logRoutes } from "./routes/logRoutes.js";
+import { notificationRoutes } from "./routes/notificationRoutes.js";
+import { reportRoutes } from "./routes/reportRoutes.js";
 import { roleRoutes } from "./routes/roleRoutes.js";
 import { settingRoutes } from "./routes/settingRoutes.js";
 import { userRoutes } from "./routes/userRoutes.js";
@@ -21,11 +23,13 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use(adminRoutes);
+app.use(reportRoutes);
 app.use(callRoutes);
 app.use(roleRoutes);
 app.use(settingRoutes);
 app.use(userRoutes);
 app.use(logRoutes);
+app.use(notificationRoutes);
 
 app.use(
   (

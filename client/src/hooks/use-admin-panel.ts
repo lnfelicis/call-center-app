@@ -99,6 +99,8 @@ export function useAdminPanel() {
         const canManageUsers = userPermissions.includes("users.manage")
         const canManageSettings = userPermissions.includes("settings.manage")
         const canViewLogs = userPermissions.includes("logs.view")
+        const canViewReports = userPermissions.includes("reports.view") || userPermissions.includes("reports.export")
+        const canViewNotifications = userPermissions.includes("notifications.view")
         const canUseCalls = userPermissions.some((permission) => permission.startsWith("calls."))
         const [permissionData, roleData, userData] = await Promise.all([
           canManageRoles
@@ -107,8 +109,8 @@ export function useAdminPanel() {
           canManageRoles || canManageUsers
             ? fetch(`${apiBaseUrl}/roles`, { headers }).then((res) => res.json())
             : Promise.resolve({ roles: [] }),
-          canManageUsers
-            ? fetch(`${apiBaseUrl}/users`, { headers }).then((res) => res.json())
+          canManageUsers || canViewReports
+            ? fetch(`${apiBaseUrl}/${canManageUsers ? "users" : "users/options"}`, { headers }).then((res) => res.json())
             : Promise.resolve({ users: [] }),
         ])
 
@@ -143,6 +145,14 @@ export function useAdminPanel() {
           }
 
           if (current === "logs" && !canViewLogs) {
+            return "dashboard"
+          }
+
+          if (current === "reports" && !canViewReports) {
+            return "dashboard"
+          }
+
+          if (current === "notifications" && !canViewNotifications) {
             return "dashboard"
           }
 

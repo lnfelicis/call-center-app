@@ -52,8 +52,8 @@ export const schemaStatements = [
     sub_category VARCHAR(120) NULL,
     issue TEXT NOT NULL,
     initial_note TEXT NULL,
-    priority ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal',
-    status ENUM('open', 'in_progress', 'waiting', 'follow_up', 'transferred', 'resolved', 'closed', 'cancelled', 'duplicate', 'archived') NOT NULL DEFAULT 'open',
+    priority VARCHAR(80) NOT NULL DEFAULT 'normal',
+    status VARCHAR(80) NOT NULL DEFAULT 'open',
     needs_follow_up TINYINT(1) NOT NULL DEFAULT 0,
     follow_up_at DATETIME NULL,
     opened_by_user_id CHAR(36) NOT NULL,
@@ -137,6 +137,25 @@ export const schemaStatements = [
     setting_key VARCHAR(80) PRIMARY KEY,
     setting_value JSON NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id CHAR(36) PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    message TEXT NOT NULL,
+    notification_type VARCHAR(80) NOT NULL,
+    channel ENUM('panel', 'email') NOT NULL DEFAULT 'panel',
+    entity_type VARCHAR(80) NULL,
+    entity_id VARCHAR(120) NULL,
+    dedupe_key VARCHAR(180) NULL,
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    read_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notifications_user_read (user_id, is_read, created_at),
+    UNIQUE KEY uniq_notifications_dedupe (dedupe_key),
+    CONSTRAINT fk_notifications_user
+      FOREIGN KEY (user_id) REFERENCES users(id)
+      ON DELETE CASCADE
   )`,
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id CHAR(36) PRIMARY KEY,
@@ -293,6 +312,12 @@ export const permissions = [
     groupName: "Raporlar",
     label: "Rapor dışa aktar",
     description: "Raporları Excel veya PDF olarak dışa aktarabilir.",
+  },
+  {
+    id: "notifications.view",
+    groupName: "Bildirimler",
+    label: "Bildirimleri görüntüle",
+    description: "Kendisine gönderilen panel bildirimlerini görüntüleyebilir.",
   },
   {
     id: "logs.view",

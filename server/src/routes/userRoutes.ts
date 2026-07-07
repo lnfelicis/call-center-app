@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
-import { requireAuth, requirePermission } from "../auth.js";
+import { requireAnyPermission, requireAuth, requirePermission } from "../auth.js";
 import { writeAuditLog } from "../audit.js";
 import { db } from "../db.js";
 import { getPasswordValidationErrors, hashPassword } from "../security.js";
@@ -21,6 +21,43 @@ type UserRow = RowDataPacket & {
 export const userRoutes = Router();
 
 userRoutes.use(requireAuth);
+
+userRoutes.get(
+  "/users/options",
+  requireAnyPermission(["reports.view", "reports.export", "users.manage"]),
+  async (_req, res) => {
+    const [rows] = await db.query<UserRow[]>(
+      `SELECT
+        users.id,
+        users.username,
+        users.full_name,
+        users.email,
+        users.status,
+        users.role_id,
+        roles.name AS role_name,
+        users.created_at,
+        users.last_login_at
+      FROM users
+      INNER JOIN roles ON roles.id = users.role_id
+      WHERE users.status = 'active'
+      ORDER BY users.full_name ASC`,
+    );
+
+    res.json({
+      users: rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        fullName: row.full_name,
+        email: row.email,
+        status: row.status,
+        roleId: row.role_id,
+        roleName: row.role_name,
+        createdAt: row.created_at,
+        lastLoginAt: row.last_login_at,
+      })),
+    });
+  },
+);
 
 userRoutes.get("/users", requirePermission("users.manage"), async (_req, res) => {
   const [rows] = await db.query<UserRow[]>(

@@ -67,12 +67,12 @@ export type AuthTokenPayload = {
   exp: number;
 };
 
-export function signToken(userId: string) {
+export function signToken(userId: string, durationMinutes = 480) {
   const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64UrlEncode(
     JSON.stringify({
       sub: userId,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 8,
+      exp: Math.floor(Date.now() / 1000) + Math.max(15, durationMinutes) * 60,
     } satisfies AuthTokenPayload),
   );
   const signature = createHmac("sha256", getTokenSecret())

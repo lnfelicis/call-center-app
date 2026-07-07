@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bell,
   ClipboardList,
   LayoutDashboard,
   ListChecks,
@@ -92,8 +93,15 @@ const navigation = [
     id: "reports",
     label: "Raporlar",
     icon: BarChart3,
-    enabled: false,
+    enabled: true,
     permissions: ["reports.view", "reports.export"],
+  },
+  {
+    id: "notifications",
+    label: "Bildirimler",
+    icon: Bell,
+    enabled: true,
+    permissions: ["notifications.view"],
   },
   {
     id: "settings",
@@ -193,8 +201,8 @@ export function AppSidebar({
 
       <SidebarFooter className="gap-3 p-4">
         <div className="flex items-center gap-3 rounded-lg border bg-background p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
-          <Avatar className="rounded-lg">
-            <AvatarFallback className="rounded-lg bg-muted text-foreground">
+          <Avatar>
+            <AvatarFallback className="bg-muted text-foreground">
               {currentUser.fullName.slice(0, 1).toUpperCase()}
             </AvatarFallback>
           </Avatar>

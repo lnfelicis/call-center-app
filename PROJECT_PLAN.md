@@ -142,7 +142,6 @@ Form alanlari:
 - Ogrenci adi soyadi
 - Gorusme tipi
 - Sorun kategorisi
-- Alt sorun kategorisi
 - Yasanilan sorun
 - Personel notu
 - Oncelik
@@ -257,7 +256,7 @@ Amac: Cagri formundaki secenekleri ve davranislari kod degisikligi olmadan panel
 Yapilacaklar:
 
 - Gorusme tipleri ayarlardan yonetilecek.
-- Sorun kategorileri ve alt kategoriler ayarlardan yonetilecek.
+- Sorun kategorileri ayarlardan yonetilecek.
 - Durum secenekleri ayarlardan yonetilecek.
 - Oncelik secenekleri ayarlardan yonetilecek.
 - Cozum kategorileri ayarlardan yonetilecek.
@@ -355,33 +354,6 @@ Kabul kriterleri:
 - Hassas veri gorunurlugu izinlere ve ayarlara gore calismali.
 - Guvenlik ayari degisiklikleri loglanmali.
 
-## Faz 9: Tarayici Uzantisi
-
-Amac: Sirket ici kullanicilarin tarayici uzerinden hizli cagri kaydi acabilmesini saglamak.
-
-Yapilacaklar:
-
-- Uzanti icin ayri paket yapisi kurulacak.
-- Uzanti paneldeki oturum ve yetki kurallarini kullanacak.
-- Hizli kayit formu yapilacak.
-- Telefon numarasi otomatik algilama opsiyonel olarak eklenecek.
-- Hangi domainlerde calisacagi ayarlardan yonetilecek.
-- Uzantidan acilan kayit, giris yapan kullanici adina olusacak.
-- Ilk surumde uzanti sadece kayit acmaya odaklanacak.
-
-Beklenen ciktilar:
-
-- Browser extension paketi
-- Hizli kayit formu
-- Panel API entegrasyonu
-- Uzanti ayarlari
-
-Kabul kriterleri:
-
-- Uzantiyi sadece yetkili kullanicilar kullanabilmeli.
-- Uzantidan acilan kayit dogru kullaniciya baglanmali.
-- Paneldeki cagri olusturma validasyonlari uzanti icin de gecerli olmali.
-
 ## Genel Test Plani
 
 - Personel sadece kendi kayitlarini gorebilmeli.
@@ -395,7 +367,6 @@ Kabul kriterleri:
 - Log ekranina sadece yetkili roller erisebilmeli.
 - Ayarlardan kapatilan form alani formda gorunmemeli.
 - Arama ve raporlama sonucunda yetkisiz veri donmemeli.
-- Uzantidan acilan kayit dogru kullanici adina olusmali.
 
 Kontrol komutlari:
 

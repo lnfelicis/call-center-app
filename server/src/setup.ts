@@ -10,6 +10,11 @@ import {
   schemaStatements,
 } from "./schema.js";
 import { hashPassword } from "./security.js";
+import {
+  defaultNotificationSettings,
+  defaultPrivacySettings,
+  defaultSecuritySettings,
+} from "./settings.js";
 
 const superAdminRoleId = "00000000-0000-4000-8000-000000000001";
 const superAdminUserId = "00000000-0000-4000-8000-000000000002";
@@ -45,6 +50,9 @@ async function runSchema() {
     `ALTER TABLE call_form_options
     MODIFY option_type ENUM('interaction_type', 'issue_category', 'issue_sub_category', 'status', 'priority', 'resolution_category') NOT NULL`,
   );
+
+  await db.query("ALTER TABLE call_records MODIFY priority VARCHAR(80) NOT NULL DEFAULT 'normal'");
+  await db.query("ALTER TABLE call_records MODIFY status VARCHAR(80) NOT NULL DEFAULT 'open'");
 
   try {
     await db.query("ALTER TABLE call_form_options ADD COLUMN value VARCHAR(80) NULL AFTER label");
@@ -121,6 +129,21 @@ async function seedCallFormFields() {
   }
 }
 
+async function seedAppSettings() {
+  await db.query(
+    "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+    ["notification_settings", JSON.stringify(defaultNotificationSettings)],
+  );
+  await db.query(
+    "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+    ["security_settings", JSON.stringify(defaultSecuritySettings)],
+  );
+  await db.query(
+    "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+    ["privacy_settings", JSON.stringify(defaultPrivacySettings)],
+  );
+}
+
 async function seedSuperAdminUser() {
   const username = process.env.SUPER_ADMIN_USERNAME || "superadmin";
   const fullName = process.env.SUPER_ADMIN_FULL_NAME || "Süper Admin";
@@ -167,6 +190,7 @@ async function main() {
   await seedPermissions();
   await seedCallFormOptions();
   await seedCallFormFields();
+  await seedAppSettings();
   await seedSuperAdminRole();
   const admin = await seedSuperAdminUser();
 

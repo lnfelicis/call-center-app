@@ -10,6 +10,8 @@ import {
 } from "../auth.js";
 import { writeAuditLog } from "../audit.js";
 import { db } from "../db.js";
+import { notifyUsersWithAnyPermission } from "../notifications.js";
+import { readAppSetting } from "../settings.js";
 
 type CallRow = RowDataPacket & {
   id: string;
@@ -95,37 +97,14 @@ type CallOptionType =
   | "priority"
   | "resolution_category";
 
-type CallPriority = "low" | "normal" | "high" | "urgent";
-type CallStatus =
-  | "open"
-  | "in_progress"
-  | "waiting"
-  | "follow_up"
-  | "transferred"
-  | "resolved"
-  | "closed"
-  | "cancelled"
-  | "duplicate"
-  | "archived";
+type CallPriority = string;
+type CallStatus = string;
 
-const editableStatuses: CallStatus[] = [
-  "open",
-  "in_progress",
-  "waiting",
-  "follow_up",
-  "transferred",
-  "closed",
-  "cancelled",
-  "duplicate",
-  "archived",
-];
-
-const allowedPriorities = ["low", "normal", "high", "urgent"] satisfies CallPriority[];
+const nonEditableStatuses = ["resolved"] satisfies string[];
 const allowedNoteTypes = ["personnel", "follow_up", "assigned_personnel", "internal", "manager"];
 const allowedOptionTypes = [
   "interaction_type",
   "issue_category",
-  "issue_sub_category",
   "status",
   "priority",
   "resolution_category",
@@ -215,6 +194,41 @@ function fieldRequiresValue(fields: CallFormFieldRow[], key: string) {
   return field.is_active === 1 && field.is_visible === 1 && field.is_required === 1;
 }
 
+function fieldIsEnabled(fields: CallFormFieldRow[], key: string) {
+  const field = getFieldSetting(fields, key);
+
+  if (!field) {
+    return true;
+  }
+
+  return field.is_active === 1 && field.is_visible === 1;
+}
+
+function fieldLabel(fields: CallFormFieldRow[], key: string) {
+  return getFieldSetting(fields, key)?.label ?? key;
+}
+
+function requiredFieldError(fields: CallFormFieldRow[], values: Record<string, unknown>) {
+  const requiredKeys = [
+    "phoneNumber",
+    "studentTc",
+    "studentName",
+    "interactionType",
+    "category",
+    "issue",
+    "initialNote",
+    "priority",
+  ];
+
+  for (const key of requiredKeys) {
+    if (fieldRequiresValue(fields, key) && !String(values[key] ?? "").trim()) {
+      return `${fieldLabel(fields, key)} zorunludur.`;
+    }
+  }
+
+  return null;
+}
+
 function fieldAllowsEdit(fields: CallFormFieldRow[], key: string) {
   const field = getFieldSetting(fields, key);
 
@@ -284,13 +298,53 @@ function normalizeRequiredString(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function createSystemValue(label: string) {
+  return label
+    .trim()
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ı", "i")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function createOptionValue(type: string, label: string) {
+  if (type === "status" || type === "priority") {
+    return createSystemValue(label) || label;
+  }
+
+  return label;
+}
+
 function normalizePhoneForMatch(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
-function normalizePriority(value: unknown): CallPriority {
-  const priority = String(value ?? "normal") as CallPriority;
-  return allowedPriorities.includes(priority) ? priority : "normal";
+async function normalizeOptionValue(
+  type: "priority" | "status",
+  value: unknown,
+  fallback: string,
+) {
+  const optionValue = normalizeRequiredString(value);
+
+  if (!optionValue) {
+    return fallback;
+  }
+
+  const [rows] = await db.query<Array<RowDataPacket & { value: string | null; label: string }>>(
+    `SELECT value, label
+    FROM call_form_options
+    WHERE option_type = ? AND is_active = 1`,
+    [type],
+  );
+  const allowedValues = rows.map((row) => row.value ?? row.label);
+
+  return allowedValues.includes(optionValue) ? optionValue : fallback;
 }
 
 function normalizeBoolean(value: unknown) {
@@ -372,6 +426,7 @@ callRoutes.get(
     const [rows] = await db.query<CallOptionRow[]>(
       `SELECT id, option_type, label, value, is_active, sort_order
       FROM call_form_options
+      WHERE option_type <> 'issue_sub_category'
       ORDER BY option_type ASC, sort_order ASC, label ASC`,
     );
     const fields = await getFieldSettings();
@@ -383,7 +438,7 @@ callRoutes.get(
 callRoutes.post("/call-options", requirePermission("settings.manage"), async (req, res) => {
   const type = String(req.body.type ?? "");
   const label = normalizeRequiredString(req.body.label);
-  const value = normalizeOptionalString(req.body.value) ?? label;
+  const value = normalizeOptionalString(req.body.value) ?? createOptionValue(type, label);
   const sortOrder = Number(req.body.sortOrder) || 0;
 
   if (!allowedOptionTypes.includes(type)) {
@@ -421,7 +476,6 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
 
   for (const option of options) {
     const label = normalizeRequiredString(option.label);
-    const value = normalizeOptionalString(option.value) ?? label;
     const type = String(option.type ?? "");
 
     if (!option.id || !allowedOptionTypes.includes(type) || label.length < 2) {
@@ -437,7 +491,8 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
 
     for (const option of options) {
       const label = normalizeRequiredString(option.label);
-      const value = normalizeOptionalString(option.value) ?? label;
+      const type = String(option.type ?? "");
+      const value = normalizeOptionalString(option.value) ?? createOptionValue(type, label);
 
       await connection.query(
         `UPDATE call_form_options
@@ -475,7 +530,7 @@ callRoutes.patch("/call-options", requirePermission("settings.manage"), async (r
 callRoutes.patch("/call-options/:id", requirePermission("settings.manage"), async (req, res) => {
   const optionId = String(req.params.id ?? "");
   const label = normalizeRequiredString(req.body.label);
-  const value = normalizeOptionalString(req.body.value) ?? label;
+  const value = normalizeOptionalString(req.body.value) ?? createOptionValue(String(req.body.type ?? ""), label);
   const isActive = Boolean(req.body.isActive);
   const sortOrder = Number(req.body.sortOrder) || 0;
 
@@ -579,30 +634,27 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
   const category = normalizeRequiredString(req.body.category);
   const issue = normalizeRequiredString(req.body.issue);
   const initialNote = normalizeOptionalString(req.body.initialNote);
-  const priority = normalizePriority(req.body.priority);
+  const priority = await normalizeOptionValue("priority", req.body.priority, "normal");
   const needsFollowUp = normalizeBoolean(req.body.needsFollowUp);
   const followUpAt = needsFollowUp ? normalizeRequiredString(req.body.followUpAt) : null;
   const fields = await getFieldSettings();
+  const requiredError = requiredFieldError(fields, {
+    phoneNumber,
+    studentTc,
+    studentName,
+    interactionType,
+    category,
+    issue,
+    initialNote,
+    priority,
+  });
 
-  if (
-    (fieldRequiresValue(fields, "phoneNumber") && !phoneNumber) ||
-    (fieldRequiresValue(fields, "studentTc") && !studentTc) ||
-    (fieldRequiresValue(fields, "studentName") && !studentName) ||
-    (fieldRequiresValue(fields, "interactionType") && !interactionType) ||
-    (fieldRequiresValue(fields, "category") && !category) ||
-    (fieldRequiresValue(fields, "issue") && !issue) ||
-    (fieldRequiresValue(fields, "initialNote") && !initialNote)
-  ) {
-    res.status(400).json({ message: "Zorunlu çağrı formu alanları boş bırakılamaz." });
+  if (requiredError) {
+    res.status(400).json({ message: requiredError });
     return;
   }
 
-  if (!phoneNumber || !interactionType || !category || !issue) {
-    res.status(400).json({ message: "Telefon, görüşme tipi, kategori ve yaşanılan sorun zorunludur." });
-    return;
-  }
-
-  if (!/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
+  if (phoneNumber && !/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
     res.status(400).json({ message: "Telefon numarası formatı geçerli değil." });
     return;
   }
@@ -612,21 +664,24 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
     return;
   }
 
-  if (needsFollowUp && !followUpAt) {
+  if (needsFollowUp && fieldIsEnabled(fields, "followUpAt") && !followUpAt) {
     res.status(400).json({ message: "Takip gerekiyorsa takip tarihi zorunludur." });
     return;
   }
 
   const warnings: string[] = [];
-  const [recentPhoneRows] = await db.query<RowDataPacket[]>(
-    `SELECT id FROM call_records
-    WHERE phone_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    LIMIT 1`,
-    [phoneNumber],
-  );
 
-  if (recentPhoneRows.length > 0) {
-    warnings.push("Aynı telefon numarasıyla son 7 gün içinde kayıt var.");
+  if (phoneNumber) {
+    const [recentPhoneRows] = await db.query<RowDataPacket[]>(
+      `SELECT id FROM call_records
+      WHERE phone_number = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      LIMIT 1`,
+      [phoneNumber],
+    );
+
+    if (recentPhoneRows.length > 0) {
+      warnings.push("Aynı telefon numarasıyla son 7 gün içinde kayıt var.");
+    }
   }
 
   if (studentTc) {
@@ -682,6 +737,19 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
     entityId: callId,
     metadata: { recordNumber, warnings },
   });
+
+  const notificationSettings = await readAppSetting("notification_settings");
+
+  if (priority === "urgent" && notificationSettings.urgentNotificationEnabled) {
+    await notifyUsersWithAnyPermission(["calls.view.all", "calls.resolve"], {
+      title: "Acil çağrı kaydı açıldı",
+      message: `${recordNumber} numaralı çağrı acil öncelikle açıldı.`,
+      type: "call.urgent",
+      entityType: "call",
+      entityId: callId,
+      dedupeKey: `urgent-call:${callId}`,
+    });
+  }
 
   const call = await getCallById(callId);
 
@@ -742,26 +810,17 @@ callRoutes.get(
         phoneParams.push(phoneNumber.slice(-10));
       }
 
-      if (hasTcFilter) {
-        const [rows] = await db.query<CallRow[]>(
-          `${matchSelect}
-          WHERE (${phoneConditions.join(" OR ")}) AND call_records.student_tc = ?${baseWhere}
-          ORDER BY call_records.created_at DESC
-          LIMIT 5`,
-          [...phoneParams, studentTc, ...visibilityParams],
-        );
-        phoneMatches = rows;
-      } else {
-        const [rows] = await db.query<CallRow[]>(
-          `${matchSelect}
-          WHERE (${phoneConditions.join(" OR ")})${baseWhere}
-          ORDER BY call_records.created_at DESC
-          LIMIT 5`,
-          [...phoneParams, ...visibilityParams],
-        );
-        phoneMatches = rows;
-      }
-    } else if (hasTcFilter) {
+      const [rows] = await db.query<CallRow[]>(
+        `${matchSelect}
+        WHERE (${phoneConditions.join(" OR ")})${baseWhere}
+        ORDER BY call_records.created_at DESC
+        LIMIT 5`,
+        [...phoneParams, ...visibilityParams],
+      );
+      phoneMatches = rows;
+    }
+
+    if (hasTcFilter) {
       const [rows] = await db.query<CallRow[]>(
         `${matchSelect}
         WHERE call_records.student_tc = ?${baseWhere}
@@ -854,7 +913,7 @@ callRoutes.patch("/calls/:id", requirePermission("calls.edit"), async (req: Auth
   const initialNote = editableValue("initialNote", req.body.initialNote, call.initial_note);
   const priority =
     fieldAllowsEdit(fields, "priority") && Object.hasOwn(req.body, "priority")
-      ? normalizePriority(req.body.priority)
+      ? await normalizeOptionValue("priority", req.body.priority, call.priority)
       : call.priority;
   const needsFollowUp = fieldAllowsEdit(fields, "needsFollowUp") && Object.hasOwn(req.body, "needsFollowUp")
     ? normalizeBoolean(req.body.needsFollowUp)
@@ -864,26 +923,23 @@ callRoutes.patch("/calls/:id", requirePermission("calls.edit"), async (req: Auth
       ? normalizeRequiredString(req.body.followUpAt)
       : null
     : call.follow_up_at;
+  const requiredError = requiredFieldError(fields, {
+    phoneNumber,
+    studentTc,
+    studentName,
+    interactionType,
+    category,
+    issue,
+    initialNote,
+    priority,
+  });
 
-  if (
-    (fieldRequiresValue(fields, "phoneNumber") && !phoneNumber) ||
-    (fieldRequiresValue(fields, "studentTc") && !studentTc) ||
-    (fieldRequiresValue(fields, "studentName") && !studentName) ||
-    (fieldRequiresValue(fields, "interactionType") && !interactionType) ||
-    (fieldRequiresValue(fields, "category") && !category) ||
-    (fieldRequiresValue(fields, "issue") && !issue) ||
-    (fieldRequiresValue(fields, "initialNote") && !initialNote)
-  ) {
-    res.status(400).json({ message: "Zorunlu çağrı alanları boş bırakılamaz." });
+  if (requiredError) {
+    res.status(400).json({ message: requiredError });
     return;
   }
 
-  if (!phoneNumber || !interactionType || !category || !issue) {
-    res.status(400).json({ message: "Telefon, görüşme tipi, kategori ve yaşanılan sorun sistem için zorunludur." });
-    return;
-  }
-
-  if (!/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
+  if (phoneNumber && !/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
     res.status(400).json({ message: "Telefon numarası formatı geçerli değil." });
     return;
   }
@@ -893,7 +949,7 @@ callRoutes.patch("/calls/:id", requirePermission("calls.edit"), async (req: Auth
     return;
   }
 
-  if (needsFollowUp && !followUpAt) {
+  if (needsFollowUp && fieldIsEnabled(fields, "followUpAt") && !followUpAt) {
     res.status(400).json({ message: "Takip gerekiyorsa takip tarihi zorunludur." });
     return;
   }
@@ -949,6 +1005,19 @@ callRoutes.patch("/calls/:id", requirePermission("calls.edit"), async (req: Auth
     entityId: call.id,
     metadata: { recordNumber: call.record_number, updatedFields },
   });
+
+  const notificationSettings = await readAppSetting("notification_settings");
+
+  if (priority === "urgent" && call.priority !== "urgent" && notificationSettings.urgentNotificationEnabled) {
+    await notifyUsersWithAnyPermission(["calls.view.all", "calls.resolve"], {
+      title: "Çağrı acil önceliğe alındı",
+      message: `${call.record_number} numaralı çağrı acil önceliğe yükseltildi.`,
+      type: "call.urgent",
+      entityType: "call",
+      entityId: call.id,
+      dedupeKey: `urgent-call:${call.id}`,
+    });
+  }
 
   const updatedCall = await getCallById(call.id);
 
@@ -1057,9 +1126,9 @@ callRoutes.patch("/calls/:id/status", requirePermission("calls.edit"), async (re
     return;
   }
 
-  const status = String(req.body.status ?? "") as CallStatus;
+  const status = await normalizeOptionValue("status", req.body.status, "");
 
-  if (!editableStatuses.includes(status)) {
+  if (!status || nonEditableStatuses.includes(status)) {
     res.status(400).json({ message: "Geçersiz durum seçimi." });
     return;
   }

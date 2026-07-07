@@ -11,6 +11,8 @@ import {
 import { CallsModule } from "@/features/calls/calls-module";
 import { DashboardModule } from "@/features/dashboard/dashboard-module";
 import { LogsModule } from "@/features/logs/logs-module";
+import { NotificationsModule } from "@/features/notifications/notifications-module";
+import { ReportsModule } from "@/features/reports/reports-module";
 import { RolesModule } from "@/features/roles/roles-module";
 import { SettingsModule } from "@/features/settings/settings-module";
 import { UsersModule } from "@/features/users/users-module";
@@ -125,6 +127,19 @@ export function AppShell() {
             <LogsModule request={panel.request} />
           )}
 
+          {panel.activeModule === "reports" && (
+            <ReportsModule
+              request={panel.request}
+              users={panel.users}
+              canExport={panel.currentUser.permissions.includes("reports.export")}
+              canViewAllCalls={panel.currentUser.permissions.includes("calls.view.all")}
+            />
+          )}
+
+          {panel.activeModule === "notifications" && (
+            <NotificationsModule request={panel.request} />
+          )}
+
           {panel.activeModule === "settings" && (
             <SettingsModule request={panel.request} />
           )}
@@ -160,6 +175,14 @@ function getModuleTitle(moduleId: ModuleId) {
 
   if (moduleId === "logs") {
     return "Log Kayıtları";
+  }
+
+  if (moduleId === "reports") {
+    return "Raporlar";
+  }
+
+  if (moduleId === "notifications") {
+    return "Bildirimler";
   }
 
   if (moduleId === "settings") {

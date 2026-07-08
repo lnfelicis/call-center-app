@@ -39,7 +39,7 @@ export function useAdminPanel() {
   const [roles, setRoles] = useState<Role[]>([])
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [selectedRoleId, setSelectedRoleId] = useState("")
-  const [loginForm, setLoginForm] = useState({ username: "superadmin", password: "Admin12345!" })
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm)
   const [userForm, setUserForm] = useState<UserForm>(emptyUserForm)
   const [isLoading, setIsLoading] = useState(false)

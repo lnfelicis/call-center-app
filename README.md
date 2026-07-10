@@ -157,3 +157,7 @@ Backend Render Web Service olarak çalıştığında Render'ın otomatik sağlad
 `RENDER=true` ortam değişkeni algılanır. Express, Render proxy zincirine güvenerek
 loglar ile çağrı kayıtlarında gerçek istemci IP adresini kullanır. Ek bir ortam
 değişkeni tanımlamanız gerekmez; yerel geliştirmede proxy güveni kapalı kalır.
+
+IP izin listesi etkinse yalnızca giriş sırasında değil, her korumalı API isteğinde
+yeniden kontrol edilir. Açık bir oturum izin verilmeyen bir IP'ye geçerse istemci ilk
+API isteğinde veya en geç 60 saniyelik oturum kontrolünde otomatik olarak çıkış yapar.

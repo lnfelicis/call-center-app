@@ -1,7 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import type { RowDataPacket } from "mysql2";
 import { db } from "./db.js";
+import { isClientIpAllowed } from "./requestIp.js";
 import { verifyToken } from "./security.js";
+import { readAppSetting } from "./settings.js";
 
 export type AuthUser = {
   id: string;
@@ -78,6 +80,16 @@ export async function requireAuth(
 
   if (!payload) {
     res.status(401).json({ message: "Oturum geçersiz veya süresi dolmuş." });
+    return;
+  }
+
+  const securitySettings = await readAppSetting("security_settings");
+
+  if (!isClientIpAllowed(req, securitySettings.ipAllowlist)) {
+    res.status(401).json({
+      code: "IP_NOT_ALLOWED",
+      message: "Bu IP adresinden oturuma izin verilmiyor.",
+    });
     return;
   }
 

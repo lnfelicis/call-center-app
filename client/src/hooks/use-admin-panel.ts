@@ -48,6 +48,17 @@ export function useAdminPanel() {
   )
   const [message, setMessage] = useState("")
 
+  const clearSession = useCallback((nextMessage = "") => {
+    localStorage.removeItem("call-center-token")
+    setToken("")
+    setCurrentUser(null)
+    setPermissions([])
+    setRoles([])
+    setUsers([])
+    setIsSessionRestoring(false)
+    setMessage(nextMessage)
+  }, [])
+
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? roles[0]
   const permissionsByGroup = useMemo(() => {
     return permissions.reduce<Record<string, Permission[]>>((groups, permission) => {
@@ -69,13 +80,17 @@ export function useAdminPanel() {
 
       const data = (await response.json().catch(() => ({}))) as { message?: string }
 
+      if (response.status === 401 && token) {
+        clearSession(data.message ?? "Oturumunuz sona erdi. Lütfen tekrar giriş yapın.")
+      }
+
       if (!response.ok) {
         throw new Error(data.message ?? "İşlem tamamlanamadı.")
       }
 
       return data as T
     },
-    [token],
+    [clearSession, token],
   )
 
   const loadPanelData = useCallback(
@@ -90,7 +105,21 @@ export function useAdminPanel() {
 
       try {
         const headers = { Authorization: `Bearer ${activeToken}` }
-        const meData = await fetch(`${apiBaseUrl}/auth/me`, { headers }).then((res) => res.json())
+        const fetchPanelData = async (path: string) => {
+          const response = await fetch(`${apiBaseUrl}${path}`, { headers })
+          const data = await response.json().catch(() => ({}))
+
+          if (response.status === 401) {
+            clearSession(data.message ?? "Oturumunuz sona erdi. Lütfen tekrar giriş yapın.")
+          }
+
+          if (!response.ok) {
+            throw new Error(data.message ?? "Veriler yüklenemedi.")
+          }
+
+          return data
+        }
+        const meData = await fetchPanelData("/auth/me")
 
         if (meData.message) {
           throw new Error(meData.message)
@@ -106,13 +135,13 @@ export function useAdminPanel() {
         const canUseCalls = userPermissions.some((permission) => permission.startsWith("calls."))
         const [permissionData, roleData, userData] = await Promise.all([
           canManageRoles
-            ? fetch(`${apiBaseUrl}/permissions`, { headers }).then((res) => res.json())
+            ? fetchPanelData("/permissions")
             : Promise.resolve({ permissions: [] }),
           canManageRoles || canManageUsers
-            ? fetch(`${apiBaseUrl}/roles`, { headers }).then((res) => res.json())
+            ? fetchPanelData("/roles")
             : Promise.resolve({ roles: [] }),
           canManageUsers || canViewReports
-            ? fetch(`${apiBaseUrl}/${canManageUsers ? "users" : "users/options"}`, { headers }).then((res) => res.json())
+            ? fetchPanelData(`/${canManageUsers ? "users" : "users/options"}`)
             : Promise.resolve({ users: [] }),
         ])
 
@@ -167,7 +196,7 @@ export function useAdminPanel() {
         setIsLoading(false)
       }
     },
-    [token],
+    [clearSession, token],
   )
 
   useEffect(() => {
@@ -178,6 +207,31 @@ export function useAdminPanel() {
 
     setIsSessionRestoring(false)
   }, [loadPanelData, token])
+
+  useEffect(() => {
+    if (!token || !currentUser) {
+      return
+    }
+
+    const validateSession = () => {
+      void request("/auth/me").catch(() => undefined)
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        validateSession()
+      }
+    }
+    const intervalId = window.setInterval(validateSession, 60_000)
+
+    window.addEventListener("focus", validateSession)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", validateSession)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [currentUser, request, token])
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -207,12 +261,7 @@ export function useAdminPanel() {
   }
 
   function handleLogout() {
-    localStorage.removeItem("call-center-token")
-    setToken("")
-    setCurrentUser(null)
-    setPermissions([])
-    setRoles([])
-    setUsers([])
+    clearSession()
   }
 
   function toggleNewRolePermission(permissionId: string) {

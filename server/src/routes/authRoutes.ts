@@ -5,7 +5,7 @@ import { getUserWithPermissions, requireAuth, type AuthenticatedRequest } from "
 import { signToken, verifyPassword } from "../security.js";
 import { writeAuditLog } from "../audit.js";
 import { readAppSetting } from "../settings.js";
-import { getClientIp } from "../requestIp.js";
+import { isClientIpAllowed } from "../requestIp.js";
 
 type LoginUserRow = RowDataPacket & {
   id: string;
@@ -26,12 +26,8 @@ authRoutes.post("/login", async (req, res) => {
   }
 
   const securitySettings = await readAppSetting("security_settings");
-  const requestIp = getClientIp(req) ?? "";
 
-  if (
-    securitySettings.ipAllowlist.length > 0 &&
-    !securitySettings.ipAllowlist.includes(requestIp)
-  ) {
+  if (!isClientIpAllowed(req, securitySettings.ipAllowlist)) {
     res.status(403).json({ message: "Bu IP adresinden girişe izin verilmiyor." });
     return;
   }

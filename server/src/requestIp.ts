@@ -9,3 +9,12 @@ export function getClientIp(req: Request) {
 
   return ipAddress.replace(/^::ffff:/i, "");
 }
+
+export function isClientIpAllowed(req: Request, ipAllowlist: string[]) {
+  if (ipAllowlist.length === 0) {
+    return true;
+  }
+
+  const clientIp = getClientIp(req);
+  return clientIp !== null && ipAllowlist.includes(clientIp);
+}

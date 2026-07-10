@@ -161,3 +161,5 @@ değişkeni tanımlamanız gerekmez; yerel geliştirmede proxy güveni kapalı k
 IP izin listesi etkinse yalnızca giriş sırasında değil, her korumalı API isteğinde
 yeniden kontrol edilir. Açık bir oturum izin verilmeyen bir IP'ye geçerse istemci ilk
 API isteğinde veya en geç 60 saniyelik oturum kontrolünde otomatik olarak çıkış yapar.
+Oturum token'ı giriş yapılan IP adresine bağlıdır; bu adres izin listesinden
+çıkarıldığında token başka bir istek IP'si raporlansa bile geçersiz sayılır.

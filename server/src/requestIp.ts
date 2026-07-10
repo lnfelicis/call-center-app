@@ -18,3 +18,18 @@ export function isClientIpAllowed(req: Request, ipAllowlist: string[]) {
   const clientIp = getClientIp(req);
   return clientIp !== null && ipAllowlist.includes(clientIp);
 }
+
+export function isSessionIpAllowed(
+  req: Request,
+  ipAllowlist: string[],
+  loginIp: string | undefined,
+) {
+  if (ipAllowlist.length === 0) {
+    return true;
+  }
+
+  return (
+    Boolean(loginIp && ipAllowlist.includes(loginIp)) &&
+    isClientIpAllowed(req, ipAllowlist)
+  );
+}

@@ -65,14 +65,16 @@ export function getPasswordValidationErrors(password: string) {
 export type AuthTokenPayload = {
   sub: string;
   exp: number;
+  loginIp?: string;
 };
 
-export function signToken(userId: string, durationMinutes = 480) {
+export function signToken(userId: string, durationMinutes = 480, loginIp?: string) {
   const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64UrlEncode(
     JSON.stringify({
       sub: userId,
       exp: Math.floor(Date.now() / 1000) + Math.max(15, durationMinutes) * 60,
+      loginIp,
     } satisfies AuthTokenPayload),
   );
   const signature = createHmac("sha256", getTokenSecret())

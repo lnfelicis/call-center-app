@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { RowDataPacket } from "mysql2";
 import { db } from "./db.js";
-import { isClientIpAllowed } from "./requestIp.js";
+import { isSessionIpAllowed } from "./requestIp.js";
 import { verifyToken } from "./security.js";
 import { readAppSetting } from "./settings.js";
 
@@ -85,7 +85,7 @@ export async function requireAuth(
 
   const securitySettings = await readAppSetting("security_settings");
 
-  if (!isClientIpAllowed(req, securitySettings.ipAllowlist)) {
+  if (!isSessionIpAllowed(req, securitySettings.ipAllowlist, payload.loginIp)) {
     res.status(401).json({
       code: "IP_NOT_ALLOWED",
       message: "Bu IP adresinden oturuma izin verilmiyor.",

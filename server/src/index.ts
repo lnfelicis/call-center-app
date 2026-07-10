@@ -10,9 +10,15 @@ import { reportRoutes } from "./routes/reportRoutes.js";
 import { roleRoutes } from "./routes/roleRoutes.js";
 import { settingRoutes } from "./routes/settingRoutes.js";
 import { userRoutes } from "./routes/userRoutes.js";
+import { parseTrustProxyHops } from "./requestIp.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
+const trustProxyHops = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS);
+
+if (trustProxyHops > 0) {
+  app.set("trust proxy", trustProxyHops);
+}
 
 app.use(cors());
 app.use(express.json());

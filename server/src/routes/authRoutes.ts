@@ -5,6 +5,7 @@ import { getUserWithPermissions, requireAuth, type AuthenticatedRequest } from "
 import { signToken, verifyPassword } from "../security.js";
 import { writeAuditLog } from "../audit.js";
 import { readAppSetting } from "../settings.js";
+import { getClientIp } from "../requestIp.js";
 
 type LoginUserRow = RowDataPacket & {
   id: string;
@@ -25,7 +26,7 @@ authRoutes.post("/login", async (req, res) => {
   }
 
   const securitySettings = await readAppSetting("security_settings");
-  const requestIp = req.ip ?? "";
+  const requestIp = getClientIp(req) ?? "";
 
   if (
     securitySettings.ipAllowlist.length > 0 &&

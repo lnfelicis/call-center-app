@@ -2,6 +2,7 @@ import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
 import type { AuthenticatedRequest } from "./auth.js";
+import { getClientIp } from "./requestIp.js";
 
 type AuditInput = {
   req: Request;
@@ -31,7 +32,7 @@ export async function writeAuditLog({
       entityType,
       entityId,
       JSON.stringify(metadata),
-      req.ip,
+      getClientIp(req),
       req.header("user-agent") ?? null,
     ],
   );

@@ -42,6 +42,7 @@ Copy-Item server/.env.example server/.env
 
 ```env
 PORT=3000
+TRUST_PROXY_HOPS=0
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
@@ -150,3 +151,15 @@ pnpm --filter client build
 ```
 
 Build çıktısı `client/dist` dizinine yazılır.
+
+### Render üzerinde gerçek istemci IP adresi
+
+Backend Render Web Service olarak çalışıyorsa servis ortam değişkenlerine şunu ekleyin:
+
+```env
+TRUST_PROXY_HOPS=1
+```
+
+Bu ayar Express'in yalnızca uygulamaya doğrudan bağlanan Render proxy katmanına
+güvenmesini ve loglar ile çağrı kayıtlarında gerçek istemci IP adresini
+kullanmasını sağlar. Yerel geliştirmede değeri `0` olarak bırakın.

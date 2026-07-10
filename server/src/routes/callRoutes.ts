@@ -9,6 +9,7 @@ import {
   type AuthenticatedRequest,
 } from "../auth.js";
 import { writeAuditLog } from "../audit.js";
+import { getClientIp } from "../requestIp.js";
 import { db } from "../db.js";
 import { notifyUsersWithAnyPermission } from "../notifications.js";
 import { readAppSetting } from "../settings.js";
@@ -759,7 +760,7 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
       followUpAt,
       req.user?.id,
       null,
-      req.ip,
+      getClientIp(req),
       req.header("user-agent") ?? null,
     ],
   );

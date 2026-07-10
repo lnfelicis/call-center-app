@@ -84,6 +84,14 @@ const emptyCallForm: CallForm = {
   followUpAt: "",
 };
 
+function sanitizePhoneInput(value: string) {
+  return value.replace(/[^0-9+ ()-]/g, "").slice(0, 20);
+}
+
+function sanitizeTcInput(value: string) {
+  return value.replace(/\D/g, "").slice(0, 11);
+}
+
 const statusLabels: Record<CallStatus, string> = {
   open: "Açık",
   in_progress: "İşlemde",
@@ -140,8 +148,8 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   );
   const [editFieldErrors, setEditFieldErrors] = useState<CallFormErrors>({});
   const [callMatches, setCallMatches] = useState<CallMatches>({
-    phoneMatches: [],
-    tcMatches: [],
+    matches: [],
+    matchedBy: null,
   });
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [activeScope, setActiveScope] = useState<"own" | "all">("own");
@@ -427,7 +435,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     if (
       editable("phoneNumber") &&
       form.phoneNumber.trim() &&
-      !/^[0-9+\s()-]{7,20}$/.test(form.phoneNumber.trim())
+      !/^[0-9+ ()-]{7,20}$/.test(form.phoneNumber.trim())
     ) {
       errors.phoneNumber =
         "Telefon numarası 7-20 karakter olmalı ve sadece rakam, boşluk, +, -, ( ) içermelidir.";
@@ -589,7 +597,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
         !isCreateOpen ||
         (phoneDigits.length < 7 && studentTc.length !== 11)
       ) {
-        setCallMatches({ phoneMatches: [], tcMatches: [] });
+        setCallMatches({ matches: [], matchedBy: null });
         setIsLoadingMatches(false);
         return;
       }
@@ -617,7 +625,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
           return;
         }
 
-        setCallMatches({ phoneMatches: [], tcMatches: [] });
+        setCallMatches({ matches: [], matchedBy: null });
       } finally {
         setIsLoadingMatches(false);
       }
@@ -702,7 +710,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
       setCreateError("");
       setCreateFieldErrors({});
     } else {
-      setCallMatches({ phoneMatches: [], tcMatches: [] });
+      setCallMatches({ matches: [], matchedBy: null });
       setIsLoadingMatches(false);
     }
   }
@@ -1146,9 +1154,11 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                             onChange={(event) =>
                               setEditFieldValue(
                                 "phoneNumber",
-                                event.target.value,
+                                sanitizePhoneInput(event.target.value),
                               )
                             }
+                            inputMode="tel"
+                            maxLength={20}
                             disabled={
                               !canEdit ||
                               selectedCall.isLocked ||
@@ -1167,8 +1177,13 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                           <Input
                             value={editForm.studentTc}
                             onChange={(event) =>
-                              setEditFieldValue("studentTc", event.target.value)
+                              setEditFieldValue(
+                                "studentTc",
+                                sanitizeTcInput(event.target.value),
+                              )
                             }
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             disabled={
                               !canEdit ||
                               selectedCall.isLocked ||
@@ -1659,8 +1674,13 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                   <Input
                     value={callForm.phoneNumber}
                     onChange={(event) =>
-                      setCreateFieldValue("phoneNumber", event.target.value)
+                      setCreateFieldValue(
+                        "phoneNumber",
+                        sanitizePhoneInput(event.target.value),
+                      )
                     }
+                    inputMode="tel"
+                    maxLength={20}
                     aria-invalid={Boolean(createFieldErrors.phoneNumber)}
                     required={fieldIsRequired("phoneNumber")}
                   />
@@ -1674,8 +1694,13 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                   <Input
                     value={callForm.studentTc}
                     onChange={(event) =>
-                      setCreateFieldValue("studentTc", event.target.value)
+                      setCreateFieldValue(
+                        "studentTc",
+                        sanitizeTcInput(event.target.value),
+                      )
                     }
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     aria-invalid={Boolean(createFieldErrors.studentTc)}
                     maxLength={11}
                     required={fieldIsRequired("studentTc")}
@@ -1687,7 +1712,6 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
               <CallMatchPreview
                 matches={callMatches}
                 isLoading={isLoadingMatches}
-                isCombinedFilter={false}
                 statusOptions={statusOptions}
                 priorityOptions={priorityOptions}
                 onOpenCall={openMatchedCall}
@@ -1955,24 +1979,28 @@ function TimelineItem({
 function CallMatchPreview({
   matches,
   isLoading,
-  isCombinedFilter,
   statusOptions,
   priorityOptions,
   onOpenCall,
 }: {
   matches: CallMatches;
   isLoading: boolean;
-  isCombinedFilter: boolean;
   statusOptions: CallFormOption[];
   priorityOptions: CallFormOption[];
   onOpenCall: (callId: string) => void;
 }) {
-  const hasPhoneMatches = matches.phoneMatches.length > 0;
-  const hasTcMatches = matches.tcMatches.length > 0;
+  const hasMatches = matches.matches.length > 0;
 
-  if (!hasPhoneMatches && !hasTcMatches) {
+  if (!hasMatches) {
     return null;
   }
+
+  const title =
+    matches.matchedBy === "phone-and-tc"
+      ? "Telefon + TC Kimlik No eşleşmeleri"
+      : matches.matchedBy === "tc"
+        ? "TC Kimlik No eşleşmeleri"
+        : "Telefon numarası eşleşmeleri";
 
   return (
     <section className="grid gap-3 rounded-lg border bg-muted/30 p-3">
@@ -1986,26 +2014,13 @@ function CallMatchPreview({
         {isLoading && <Badge variant="outline">Aranıyor</Badge>}
       </div>
 
-      {hasPhoneMatches && (
-        <MatchGroup
-          title={
-            isCombinedFilter
-              ? "Telefon + TC Kimlik No eşleşmeleri"
-              : "Telefon numarası eşleşmeleri"
-          }
-          calls={matches.phoneMatches}
-          statusOptions={statusOptions}
-          priorityOptions={priorityOptions}
-          onOpenCall={onOpenCall}
-        />
-      )}
-      {hasTcMatches && (
-        <MatchGroup
-          title="TC Kimlik No eşleşmeleri"
-          calls={matches.tcMatches}
-          onOpenCall={onOpenCall}
-        />
-      )}
+      <MatchGroup
+        title={title}
+        calls={matches.matches}
+        statusOptions={statusOptions}
+        priorityOptions={priorityOptions}
+        onOpenCall={onOpenCall}
+      />
     </section>
   );
 }

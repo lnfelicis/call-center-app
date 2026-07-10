@@ -691,7 +691,7 @@ callRoutes.post("/calls", requirePermission("calls.create"), async (req: Authent
     return;
   }
 
-  if (phoneNumber && !/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
+  if (phoneNumber && !/^[0-9+ ()-]{7,20}$/.test(phoneNumber)) {
     res.status(400).json({ message: "Telefon numarası formatı geçerli değil." });
     return;
   }
@@ -832,32 +832,33 @@ callRoutes.get(
       LEFT JOIN users assigned_to ON assigned_to.id = call_records.assigned_to_user_id
       LEFT JOIN users resolved_by ON resolved_by.id = call_records.resolved_by_user_id`;
 
-    let phoneMatches: CallRow[] = [];
-    let tcMatches: CallRow[] = [];
+    let matches: CallRow[] = [];
+    let matchedBy: "phone-and-tc" | "tc" | "phone" | null = null;
 
     const hasPhoneFilter = phoneNumber.length >= 7;
     const hasTcFilter = /^\d{11}$/.test(studentTc);
 
-    if (hasPhoneFilter) {
-      const phoneConditions = [`${phoneExpression} = ?`];
-      const phoneParams: string[] = [phoneNumber];
+    const phoneConditions = [`${phoneExpression} = ?`];
+    const phoneParams: string[] = [phoneNumber];
 
-      if (phoneNumber.length >= 10) {
-        phoneConditions.push(`RIGHT(${phoneExpression}, 10) = ?`);
-        phoneParams.push(phoneNumber.slice(-10));
-      }
-
-      const [rows] = await db.query<CallRow[]>(
-        `${matchSelect}
-        WHERE (${phoneConditions.join(" OR ")})${baseWhere}
-        ORDER BY call_records.created_at DESC
-        LIMIT 5`,
-        [...phoneParams, ...visibilityParams],
-      );
-      phoneMatches = rows;
+    if (phoneNumber.length >= 10) {
+      phoneConditions.push(`RIGHT(${phoneExpression}, 10) = ?`);
+      phoneParams.push(phoneNumber.slice(-10));
     }
 
-    if (hasTcFilter) {
+    if (hasPhoneFilter && hasTcFilter) {
+      const [rows] = await db.query<CallRow[]>(
+        `${matchSelect}
+        WHERE (${phoneConditions.join(" OR ")}) AND call_records.student_tc = ?${baseWhere}
+        ORDER BY call_records.created_at DESC
+        LIMIT 5`,
+        [...phoneParams, studentTc, ...visibilityParams],
+      );
+      matches = rows;
+      matchedBy = rows.length > 0 ? "phone-and-tc" : null;
+    }
+
+    if (matches.length === 0 && hasTcFilter) {
       const [rows] = await db.query<CallRow[]>(
         `${matchSelect}
         WHERE call_records.student_tc = ?${baseWhere}
@@ -865,12 +866,25 @@ callRoutes.get(
         LIMIT 5`,
         [studentTc, ...visibilityParams],
       );
-      tcMatches = rows;
+      matches = rows;
+      matchedBy = rows.length > 0 ? "tc" : null;
+    }
+
+    if (matches.length === 0 && hasPhoneFilter) {
+      const [rows] = await db.query<CallRow[]>(
+        `${matchSelect}
+        WHERE (${phoneConditions.join(" OR ")})${baseWhere}
+        ORDER BY call_records.created_at DESC
+        LIMIT 5`,
+        [...phoneParams, ...visibilityParams],
+      );
+      matches = rows;
+      matchedBy = rows.length > 0 ? "phone" : null;
     }
 
     res.json({
-      phoneMatches: phoneMatches.map((call) => serializeCall(req, call, fields)),
-      tcMatches: tcMatches.map((call) => serializeCall(req, call, fields)),
+      matches: matches.map((call) => serializeCall(req, call, fields)),
+      matchedBy,
     });
   },
 );
@@ -976,7 +990,7 @@ callRoutes.patch("/calls/:id", requirePermission("calls.edit"), async (req: Auth
     return;
   }
 
-  if (phoneNumber && !/^[0-9+\s()-]{7,20}$/.test(phoneNumber)) {
+  if (phoneNumber && !/^[0-9+ ()-]{7,20}$/.test(phoneNumber)) {
     res.status(400).json({ message: "Telefon numarası formatı geçerli değil." });
     return;
   }

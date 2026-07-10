@@ -100,8 +100,8 @@ export type CallRecord = {
 }
 
 export type CallMatches = {
-  phoneMatches: CallRecord[]
-  tcMatches: CallRecord[]
+  matches: CallRecord[]
+  matchedBy: "phone-and-tc" | "tc" | "phone" | null
 }
 
 export type CallNote = {

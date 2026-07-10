@@ -292,11 +292,15 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     {
       id: "record",
       header: "Kayıt",
-      size: 190,
-      minSize: 150,
+      size: 260,
+      minSize: 240,
+      maxSize: 320,
       accessor: (call) => `${call.recordNumber} ${call.createdAt}`,
       cell: (call) => (
-        <span className="truncate font-medium text-foreground">
+        <span
+          className="whitespace-nowrap font-medium text-foreground"
+          title={call.recordNumber}
+        >
           {call.recordNumber}
         </span>
       ),

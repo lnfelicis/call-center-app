@@ -42,7 +42,6 @@ Copy-Item server/.env.example server/.env
 
 ```env
 PORT=3000
-TRUST_PROXY_HOPS=0
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
@@ -154,12 +153,7 @@ Build çıktısı `client/dist` dizinine yazılır.
 
 ### Render üzerinde gerçek istemci IP adresi
 
-Backend Render Web Service olarak çalışıyorsa servis ortam değişkenlerine şunu ekleyin:
-
-```env
-TRUST_PROXY_HOPS=1
-```
-
-Bu ayar Express'in yalnızca uygulamaya doğrudan bağlanan Render proxy katmanına
-güvenmesini ve loglar ile çağrı kayıtlarında gerçek istemci IP adresini
-kullanmasını sağlar. Yerel geliştirmede değeri `0` olarak bırakın.
+Backend Render Web Service olarak çalıştığında Render'ın otomatik sağladığı
+`RENDER=true` ortam değişkeni algılanır. Express, Render proxy zincirine güvenerek
+loglar ile çağrı kayıtlarında gerçek istemci IP adresini kullanır. Ek bir ortam
+değişkeni tanımlamanız gerekmez; yerel geliştirmede proxy güveni kapalı kalır.

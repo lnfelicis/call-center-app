@@ -1,39 +1,15 @@
-import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
-import type { AuthenticatedRequest } from "./auth.js";
-import { getClientIp } from "./requestIp.js";
+import { AuditRepository } from "./modules/audit/repository.js";
+import { createAuditWriter } from "./modules/audit/service.js";
+import { getClientIp } from "./modules/auth/request-ip.js";
 
-type AuditInput = {
-  req: Request;
-  action: string;
-  entityType: string;
-  entityId?: string | null;
-  metadata?: Record<string, unknown>;
-};
+export type { AuditInput, AuditWriter } from "./modules/audit/types.js";
 
-export async function writeAuditLog({
-  req,
-  action,
-  entityType,
-  entityId = null,
-  metadata = {},
-}: AuditInput) {
-  const actorUserId = (req as AuthenticatedRequest).user?.id ?? null;
+const auditRepository = new AuditRepository(db);
 
-  await db.query(
-    `INSERT INTO audit_logs
-      (id, actor_user_id, action, entity_type, entity_id, metadata, ip_address, user_agent)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      randomUUID(),
-      actorUserId,
-      action,
-      entityType,
-      entityId,
-      JSON.stringify(metadata),
-      getClientIp(req),
-      req.header("user-agent") ?? null,
-    ],
-  );
-}
+export const writeAuditLog = createAuditWriter({
+  repository: auditRepository,
+  idGenerator: randomUUID,
+  getClientIp,
+});

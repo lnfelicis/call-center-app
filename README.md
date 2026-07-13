@@ -129,6 +129,46 @@ Client lint:
 pnpm --filter client lint
 ```
 
+## Backend Testleri
+
+Unit ve HTTP contract testleri veritabanı gerektirmez:
+
+```bash
+pnpm --filter server test:unit
+```
+
+Unit testler; policy, mapper, service/controller orkestrasyonu, coercion, yetki,
+transaction ve yan etki sırasını fake bağımlılıklarla hızlı biçimde doğrular.
+
+Entegrasyon testleri gerçek MySQL davranışını doğrulamak için yalnızca ayrı bir test
+şemasında çalışır. Önce `server/.env.test.example` dosyasını `server/.env.test`
+olarak kopyalayıp test bağlantı bilgilerini düzenleyin. `DB_NAME` güvenlik nedeniyle
+mutlaka `_test` ile bitmelidir; aksi durumda destructive reset engellenir. Normal
+`server/.env` testler tarafından yüklenmez.
+
+```bash
+pnpm --filter server test:integration
+```
+
+Entegrasyon testleri; gerçek HTTP middleware zinciri, MySQL SQL/FK/transaction
+davranışı, setup idempotency, auth lockout, settings transaction regresyonu,
+notification yan etkileri ve audit kayıtlarını kapsar. `.env.test` yoksa bu suite
+güvenli biçimde skip edilir.
+
+Coverage ve tam backend doğrulaması:
+
+```bash
+pnpm --filter server test:coverage
+pnpm --filter server test:typecheck
+pnpm --filter server build
+```
+
+Backend kaynakları feature-first olarak `server/src/modules/<feature>/` altında
+routes/controller, service, repository ve gerektiğinde policy/mapper katmanlarına
+ayrılmıştır. `server/src/app.ts` listener açmadan Express uygulamasını üretir;
+`server/src/index.ts` production ortamını yükleyip lifecycle/bootstrap katmanını
+başlatır.
+
 ## Production Çalıştırma
 
 Önce server build alın:

@@ -1,7 +1,10 @@
-import mysql from "mysql2/promise";
-import "dotenv/config";
+import type { ConnectionOptions } from "mysql2";
+import mysql, { type Connection } from "mysql2/promise";
 import { randomUUID } from "node:crypto";
-import { db } from "./db.js";
+import { pathToFileURL } from "node:url";
+import { readAppConfig } from "./config/app-config.js";
+import type { Database } from "./database/database.js";
+import { createPool } from "./database/mysql.js";
 import {
   defaultCallFormFields,
   defaultCallFormOptions,
@@ -14,7 +17,7 @@ import {
   defaultNotificationSettings,
   defaultPrivacySettings,
   defaultSecuritySettings,
-} from "./settings.js";
+} from "./modules/settings/app-settings.types.js";
 
 const superAdminRoleId = "00000000-0000-4000-8000-000000000001";
 const superAdminUserId = "00000000-0000-4000-8000-000000000002";
@@ -35,43 +38,86 @@ const defaultOptionColors: Record<string, string> = {
   urgent: "#dc2626",
 };
 
-async function ensureDatabaseExists() {
-  const database = process.env.DB_NAME;
+export type SetupConfig = {
+  databaseName: string | undefined;
+  databaseServer: ConnectionOptions;
+  superAdmin: {
+    username: string;
+    fullName: string;
+    email: string;
+    password: string;
+  };
+};
 
-  if (!database) {
+type SetupConnection = Pick<Connection, "query" | "end">;
+
+export type SetupDependencies = {
+  database: Database;
+  createServerConnection: (config: ConnectionOptions) => Promise<SetupConnection>;
+  hashPassword: (password: string) => Promise<string>;
+  generateId: () => string;
+  output: Pick<Console, "log">;
+};
+
+export function readSetupConfig(env: NodeJS.ProcessEnv = process.env): SetupConfig {
+  const databaseServer: ConnectionOptions = {
+    port: Number(env.DB_PORT) || 3306,
+    multipleStatements: false,
+    ...(env.DB_HOST === undefined ? {} : { host: env.DB_HOST }),
+    ...(env.DB_USER === undefined ? {} : { user: env.DB_USER }),
+    ...(env.DB_PASSWORD === undefined ? {} : { password: env.DB_PASSWORD }),
+  };
+
+  return {
+    databaseName: env.DB_NAME,
+    databaseServer,
+    superAdmin: {
+      username: env.SUPER_ADMIN_USERNAME || "superadmin",
+      fullName: env.SUPER_ADMIN_FULL_NAME || "Süper Admin",
+      email: env.SUPER_ADMIN_EMAIL || "superadmin@example.com",
+      password: env.SUPER_ADMIN_PASSWORD || "Admin12345!",
+    },
+  };
+}
+
+async function ensureDatabaseExists(
+  config: SetupConfig,
+  createServerConnection: SetupDependencies["createServerConnection"],
+) {
+  if (!config.databaseName) {
     throw new Error("DB_NAME .env içinde tanımlı olmalıdır.");
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    multipleStatements: false,
-  });
+  const connection = await createServerConnection(config.databaseServer);
 
   try {
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    await connection.query(
+      `CREATE DATABASE IF NOT EXISTS \`${config.databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    );
   } finally {
     await connection.end();
   }
 }
 
-async function runSchema() {
+async function runSchema(database: Database) {
   for (const statement of schemaStatements) {
-    await db.query(statement);
+    await database.query(statement);
   }
 
-  await db.query(
+  await database.query(
     `ALTER TABLE call_form_options
     MODIFY option_type ENUM('interaction_type', 'issue_category', 'issue_sub_category', 'status', 'priority', 'resolution_category') NOT NULL`,
   );
 
-  await db.query("ALTER TABLE call_records MODIFY priority VARCHAR(80) NOT NULL DEFAULT 'normal'");
-  await db.query("ALTER TABLE call_records MODIFY status VARCHAR(80) NOT NULL DEFAULT 'open'");
+  await database.query(
+    "ALTER TABLE call_records MODIFY priority VARCHAR(80) NOT NULL DEFAULT 'normal'",
+  );
+  await database.query(
+    "ALTER TABLE call_records MODIFY status VARCHAR(80) NOT NULL DEFAULT 'open'",
+  );
 
   try {
-    await db.query("ALTER TABLE call_form_options ADD COLUMN value VARCHAR(80) NULL AFTER label");
+    await database.query("ALTER TABLE call_form_options ADD COLUMN value VARCHAR(80) NULL AFTER label");
   } catch (error) {
     const code = (error as { code?: string }).code;
 
@@ -81,7 +127,7 @@ async function runSchema() {
   }
 
   try {
-    await db.query("ALTER TABLE call_form_options ADD COLUMN color VARCHAR(16) NULL AFTER value");
+    await database.query("ALTER TABLE call_form_options ADD COLUMN color VARCHAR(16) NULL AFTER value");
   } catch (error) {
     const code = (error as { code?: string }).code;
 
@@ -91,9 +137,9 @@ async function runSchema() {
   }
 }
 
-async function seedPermissions() {
+async function seedPermissions(database: Database) {
   for (const permission of permissions) {
-    await db.query(
+    await database.query(
       `INSERT INTO permissions (id, group_name, label, description)
       VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
@@ -105,8 +151,8 @@ async function seedPermissions() {
   }
 }
 
-async function seedSuperAdminRole() {
-  await db.query(
+async function seedSuperAdminRole(database: Database) {
+  await database.query(
     `INSERT INTO roles (id, name, description, is_system, is_active)
     VALUES (?, 'Süper Admin', 'Sistemdeki tüm yetkilere sahip ana yönetici rolü.', 1, 1)
     ON DUPLICATE KEY UPDATE
@@ -117,22 +163,22 @@ async function seedSuperAdminRole() {
     [superAdminRoleId],
   );
 
-  await db.query("DELETE FROM role_permissions WHERE role_id = ?", [superAdminRoleId]);
+  await database.query("DELETE FROM role_permissions WHERE role_id = ?", [superAdminRoleId]);
 
   for (const permission of permissions) {
-    await db.query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", [
+    await database.query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", [
       superAdminRoleId,
       permission.id,
     ]);
   }
 }
 
-async function seedCallFormOptions() {
+async function seedCallFormOptions(database: Database) {
   for (const option of [...defaultCallFormOptions, ...extendedCallFormOptions]) {
     const value = "value" in option && typeof option.value === "string" ? option.value : option.label;
     const color = defaultOptionColors[value] ?? null;
 
-    await db.query(
+    await database.query(
       `INSERT INTO call_form_options (id, option_type, label, value, color, is_active, sort_order)
       VALUES (UUID(), ?, ?, ?, ?, 1, ?)
       ON DUPLICATE KEY UPDATE
@@ -145,9 +191,9 @@ async function seedCallFormOptions() {
   }
 }
 
-async function seedCallFormFields() {
+async function seedCallFormFields(database: Database) {
   for (const field of defaultCallFormFields) {
-    await db.query(
+    await database.query(
       `INSERT INTO call_form_fields
         (field_key, label, is_active, is_required, is_visible, is_editable, is_masked, sort_order)
       VALUES (?, ?, 1, ?, 1, 1, ?, ?)
@@ -159,28 +205,29 @@ async function seedCallFormFields() {
   }
 }
 
-async function seedAppSettings() {
-  await db.query(
+async function seedAppSettings(database: Database) {
+  await database.query(
     "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
     ["notification_settings", JSON.stringify(defaultNotificationSettings)],
   );
-  await db.query(
+  await database.query(
     "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
     ["security_settings", JSON.stringify(defaultSecuritySettings)],
   );
-  await db.query(
+  await database.query(
     "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
     ["privacy_settings", JSON.stringify(defaultPrivacySettings)],
   );
 }
 
-async function seedSuperAdminUser() {
-  const username = process.env.SUPER_ADMIN_USERNAME || "superadmin";
-  const fullName = process.env.SUPER_ADMIN_FULL_NAME || "Süper Admin";
-  const email = process.env.SUPER_ADMIN_EMAIL || "superadmin@example.com";
-  const password = process.env.SUPER_ADMIN_PASSWORD || "Admin12345!";
+async function seedSuperAdminUser(
+  database: Database,
+  config: SetupConfig,
+  dependencies: Pick<SetupDependencies, "hashPassword" | "generateId">,
+) {
+  const { username, fullName, email, password } = config.superAdmin;
 
-  await db.query(
+  await database.query(
     `INSERT INTO users
       (id, username, full_name, email, password_hash, role_id, status)
     VALUES (?, ?, ?, ?, ?, ?, 'active')
@@ -194,17 +241,17 @@ async function seedSuperAdminUser() {
       username,
       fullName,
       email,
-      await hashPassword(password),
+      await dependencies.hashPassword(password),
       superAdminRoleId,
     ],
   );
 
-  await db.query(
+  await database.query(
     `INSERT INTO audit_logs
       (id, actor_user_id, action, entity_type, entity_id, metadata)
     VALUES (?, ?, 'seed.super_admin', 'user', ?, ?)`,
     [
-      randomUUID(),
+      dependencies.generateId(),
       superAdminUserId,
       superAdminUserId,
       JSON.stringify({ username, role: "Süper Admin" }),
@@ -214,27 +261,54 @@ async function seedSuperAdminUser() {
   return { username, email, password };
 }
 
-async function main() {
-  await ensureDatabaseExists();
-  await runSchema();
-  await seedPermissions();
-  await seedCallFormOptions();
-  await seedCallFormFields();
-  await seedAppSettings();
-  await seedSuperAdminRole();
-  const admin = await seedSuperAdminUser();
+export async function runSetup(config: SetupConfig, dependencies: SetupDependencies) {
+  await ensureDatabaseExists(config, dependencies.createServerConnection);
+  await runSchema(dependencies.database);
+  await seedPermissions(dependencies.database);
+  await seedCallFormOptions(dependencies.database);
+  await seedCallFormFields(dependencies.database);
+  await seedAppSettings(dependencies.database);
+  await seedSuperAdminRole(dependencies.database);
+  const admin = await seedSuperAdminUser(dependencies.database, config, dependencies);
 
-  console.log("Setup tamamlandı.");
-  console.log(`Süper Admin kullanıcı adı: ${admin.username}`);
-  console.log(`Süper Admin e-posta: ${admin.email}`);
-  console.log(`Geçici şifre: ${admin.password}`);
-  console.log("İlk girişten sonra SUPER_ADMIN_PASSWORD env değeriyle şifreyi değiştirmeniz önerilir.");
+  dependencies.output.log("Setup tamamlandı.");
+  dependencies.output.log(`Süper Admin kullanıcı adı: ${admin.username}`);
+  dependencies.output.log(`Süper Admin e-posta: ${admin.email}`);
+  dependencies.output.log(`Geçici şifre: ${admin.password}`);
+  dependencies.output.log(
+    "İlk girişten sonra SUPER_ADMIN_PASSWORD env değeriyle şifreyi değiştirmeniz önerilir.",
+  );
 
-  await db.end();
+  return admin;
 }
 
-main().catch(async (error: unknown) => {
-  console.error(error);
-  await db.end();
-  process.exit(1);
-});
+export async function runSetupCli() {
+  const { config: loadEnvironment } = await import("dotenv");
+  loadEnvironment();
+
+  const setupConfig = readSetupConfig();
+  const database = createPool(readAppConfig().database);
+
+  try {
+    await runSetup(setupConfig, {
+      database,
+      createServerConnection: (connectionConfig) => mysql.createConnection(connectionConfig),
+      hashPassword,
+      generateId: randomUUID,
+      output: console,
+    });
+  } finally {
+    await database.end();
+  }
+}
+
+const executedDirectly = Boolean(
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url,
+);
+
+if (executedDirectly) {
+  runSetupCli().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

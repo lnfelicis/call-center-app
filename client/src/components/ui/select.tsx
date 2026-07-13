@@ -2,6 +2,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { trackSelectPointerDownEvents } from "@/lib/select-interaction"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 function Select({
@@ -62,6 +63,16 @@ function SelectContent({
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  React.useEffect(() => {
+    const ownerDocument = globalThis.document
+
+    if (!ownerDocument) {
+      return
+    }
+
+    return trackSelectPointerDownEvents(ownerDocument)
+  }, [])
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content

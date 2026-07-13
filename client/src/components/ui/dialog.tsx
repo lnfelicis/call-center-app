@@ -2,6 +2,7 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { isSelectPointerDownEvent } from "@/lib/select-interaction"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
@@ -66,9 +67,11 @@ function DialogContent({
           className
         )}
         onInteractOutside={(event) => {
-          const target = event.target as HTMLElement | null
+          const target = event.target as Element | null
+          const originalEvent = event.detail.originalEvent
           const isSelectInteraction = Boolean(
-            target?.closest('[data-slot="select-content"]'),
+            target?.closest('[data-slot="select-content"]') ||
+              isSelectPointerDownEvent(originalEvent),
           )
 
           if (!closeOnInteractOutside || isSelectInteraction) {

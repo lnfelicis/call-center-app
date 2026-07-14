@@ -1,28 +1,34 @@
-import type { FormEvent, ReactNode } from "react"
-import { KeyRound, LayoutDashboard, ShieldCheck } from "lucide-react"
+import { useState, type FormEvent } from "react";
+import { CircleAlert, Eye, EyeOff, KeyRound } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 
 type LoginScreenProps = {
   form: {
-    username: string
-    password: string
-  }
-  message: string
-  isLoading: boolean
-  onChange: (form: { username: string; password: string }) => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-}
+    username: string;
+    password: string;
+  };
+  message: string;
+  isLoading: boolean;
+  onChange: (form: { username: string; password: string }) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+};
 
 export function LoginScreen({
   form,
@@ -31,24 +37,11 @@ export function LoginScreen({
   onChange,
   onSubmit,
 }: LoginScreenProps) {
-  return (
-    <main className="grid min-h-svh items-center gap-8 bg-background p-5 md:grid-cols-[minmax(0,1fr)_420px] md:p-12">
-      <section className="max-w-3xl">
-        <Badge variant="outline">Yönetim Paneli</Badge>
-        <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-none tracking-normal md:text-6xl">
-          Çağrı kayıt sistemi
-        </h1>
-        <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
-          Rol bazlı yetkilendirme, kullanıcı yönetimi ve çağrı operasyonları için genişleyebilir yönetim yüzeyi.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-2">
-          <Highlight icon={<ShieldCheck />} label="Rol bazlı erişim" />
-          <Highlight icon={<KeyRound />} label="Güvenli oturum" />
-          <Highlight icon={<LayoutDashboard />} label="Modüler panel" />
-        </div>
-      </section>
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-      <Card>
+  return (
+    <main className="flex min-h-svh items-center justify-center bg-background p-5 md:p-12">
+      <Card className="w-full max-w-[420px]">
         <CardHeader>
           <CardTitle>Sisteme giriş</CardTitle>
           <CardDescription>
@@ -56,41 +49,86 @@ export function LoginScreen({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <div className="grid gap-2">
-              <Label htmlFor="username">Kullanıcı adı veya e-posta</Label>
-              <Input
-                id="username"
-                value={form.username}
-                onChange={(event) => onChange({ ...form, username: event.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Şifre</Label>
-              <Input
-                id="password"
-                type="password"
-                value={form.password}
-                onChange={(event) => onChange({ ...form, password: event.target.value })}
-              />
-            </div>
-            {message && <p className="text-sm text-muted-foreground">{message}</p>}
+          <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+            <FieldGroup className="gap-4">
+              <Field data-disabled={isLoading || undefined}>
+                <FieldLabel htmlFor="username">
+                  Kullanıcı adı veya e-posta
+                </FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="username"
+                    autoFocus
+                    autoCapitalize="none"
+                    autoComplete="username"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    disabled={isLoading}
+                    value={form.username}
+                    onChange={(event) =>
+                      onChange({ ...form, username: event.target.value })
+                    }
+                  />
+                </InputGroup>
+              </Field>
+              <Field data-disabled={isLoading || undefined}>
+                <FieldLabel htmlFor="password">Şifre</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="password"
+                    type={isPasswordVisible ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    disabled={isLoading}
+                    value={form.password}
+                    onChange={(event) =>
+                      onChange({ ...form, password: event.target.value })
+                    }
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      size="icon-xs"
+                      aria-label={
+                        isPasswordVisible ? "Şifreyi gizle" : "Şifreyi göster"
+                      }
+                      aria-pressed={isPasswordVisible}
+                      title={
+                        isPasswordVisible ? "Şifreyi gizle" : "Şifreyi göster"
+                      }
+                      disabled={isLoading}
+                      onClick={() =>
+                        setIsPasswordVisible((visible) => !visible)
+                      }
+                    >
+                      {isPasswordVisible ? <Eye /> : <EyeOff />}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              </Field>
+            </FieldGroup>
+            {message && (
+              <Alert variant="destructive">
+                <CircleAlert />
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            )}
             <Button type="submit" size="lg" disabled={isLoading}>
-              <KeyRound />
-              Giriş yap
+              {isLoading ? (
+                <>
+                  <Spinner data-icon="inline-start" />
+                  Giriş yapılıyor...
+                </>
+              ) : (
+                <>
+                  <KeyRound data-icon="inline-start" />
+                  Giriş yap
+                </>
+              )}
             </Button>
           </form>
         </CardContent>
       </Card>
     </main>
-  )
-}
-
-function Highlight({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <span className="inline-flex min-h-9 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
-      <span className="[&_svg]:size-4">{icon}</span>
-      {label}
-    </span>
-  )
+  );
 }

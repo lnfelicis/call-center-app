@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
-import type { AuthenticatedRequest } from "../../auth.js";
+import type { AuthenticatedRequest } from "../auth/types.js";
 import {
   serializeCall,
   serializeEvent,

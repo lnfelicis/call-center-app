@@ -1,4 +1,4 @@
-import type { NotificationSettings } from "../../settings.js";
+import type { NotificationSettings } from "../settings/app-settings.types.js";
 import type { NotificationRepository } from "./repository.js";
 import type { NotificationInput } from "./types.js";
 

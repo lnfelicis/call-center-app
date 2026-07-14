@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import type { requireAuth, requirePermission } from "../../../src/auth.js";
+import type { RequestHandler } from "express";
 import type { NotificationController } from "../../../src/modules/notifications/controller.js";
 import { createNotificationRoutes } from "../../../src/modules/notifications/routes.js";
 
 describe("createNotificationRoutes", () => {
   it("registers list and mark-read behind notifications.view", () => {
     const handler = vi.fn();
-    const authenticate = vi.fn() as unknown as typeof requireAuth;
-    const authorize = vi.fn().mockReturnValue(handler) as unknown as typeof requirePermission;
+    const authenticate = vi.fn() as unknown as RequestHandler;
+    const authorize = vi.fn().mockReturnValue(handler) as unknown as (
+      permission: string,
+    ) => RequestHandler;
     const controller = { list: handler, markRead: handler } as unknown as NotificationController;
 
     const router = createNotificationRoutes({ controller, authenticate, authorize });

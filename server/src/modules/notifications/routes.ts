@@ -1,11 +1,10 @@
-import { Router } from "express";
-import type { requireAuth, requirePermission } from "../../auth.js";
+import { Router, type RequestHandler } from "express";
 import type { NotificationController } from "./controller.js";
 
 export type NotificationRoutesDependencies = {
   controller: NotificationController;
-  authenticate: typeof requireAuth;
-  authorize: typeof requirePermission;
+  authenticate: RequestHandler;
+  authorize: (permission: string) => RequestHandler;
 };
 
 export function createNotificationRoutes(dependencies: NotificationRoutesDependencies) {

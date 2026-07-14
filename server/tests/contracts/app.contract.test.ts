@@ -2,19 +2,18 @@ import request from "supertest";
 import { Router } from "express";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.js";
+import { createAppRouters } from "../../src/composition/app-routers.js";
 import { readAppConfig } from "../../src/config/app-config.js";
+import type { Database } from "../../src/database/database.js";
 import { createLogger } from "../../src/http/logger.js";
 import { HttpError } from "../../src/http/errors.js";
-import { adminRoutes } from "../../src/routes/adminRoutes.js";
-import { authRoutes } from "../../src/routes/authRoutes.js";
-import { callRoutes } from "../../src/routes/callRoutes.js";
-import { logRoutes } from "../../src/routes/logRoutes.js";
-import { notificationRoutes } from "../../src/routes/notificationRoutes.js";
-import { reportRoutes } from "../../src/routes/reportRoutes.js";
-import { roleRoutes } from "../../src/routes/roleRoutes.js";
-import { settingRoutes } from "../../src/routes/settingRoutes.js";
-import { userRoutes } from "../../src/routes/userRoutes.js";
 import { apiRouteManifest, protectedApiEndpoints } from "./api-manifest.js";
+
+const contractRouters = createAppRouters({
+  database: {} as Database,
+  idGenerator: () => "contract-id",
+  clock: () => new Date("2026-01-01T00:00:00.000Z"),
+});
 
 function createTestApp(trustProxy = false) {
   const config = {
@@ -23,7 +22,7 @@ function createTestApp(trustProxy = false) {
     logLevel: "silent",
   };
 
-  return createApp({ config, logger: createLogger("silent") });
+  return createApp({ config, logger: createLogger("silent"), routers: contractRouters });
 }
 
 describe("HTTP contract", () => {
@@ -35,15 +34,15 @@ describe("HTTP contract", () => {
       };
     };
     const routers = [
-      { prefix: "/auth", router: authRoutes },
-      { prefix: "", router: adminRoutes },
-      { prefix: "", router: reportRoutes },
-      { prefix: "", router: callRoutes },
-      { prefix: "", router: roleRoutes },
-      { prefix: "", router: settingRoutes },
-      { prefix: "", router: userRoutes },
-      { prefix: "", router: logRoutes },
-      { prefix: "", router: notificationRoutes },
+      { prefix: "/auth", router: contractRouters.auth },
+      { prefix: "", router: contractRouters.admin },
+      { prefix: "", router: contractRouters.reports },
+      { prefix: "", router: contractRouters.calls },
+      { prefix: "", router: contractRouters.roles },
+      { prefix: "", router: contractRouters.settings },
+      { prefix: "", router: contractRouters.users },
+      { prefix: "", router: contractRouters.logs },
+      { prefix: "", router: contractRouters.notifications },
     ];
     const actual = routers.flatMap(({ prefix, router }) =>
       ((router as unknown as { stack: RouteLayer[] }).stack ?? []).flatMap((layer) => {

@@ -1,4 +1,4 @@
-import type { AuthenticatedRequest } from "../../auth.js";
+import type { AuthenticatedRequest } from "../auth/types.js";
 import { hasPermission, shouldMaskField } from "./call.policy.js";
 import type {
   CallFormFieldRow,

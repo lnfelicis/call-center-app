@@ -29,9 +29,14 @@ function createRouters(auth: Router = express.Router()): AppRouters {
   };
 }
 
-describe("createApp dependency fallbacks", () => {
-  it("creates default config, logger and routers when no overrides are supplied", async () => {
-    const app = createApp();
+describe("createApp", () => {
+  it("creates the health route from explicit dependencies", async () => {
+    const config = readAppConfig({ NODE_ENV: "test" });
+    const app = createApp({
+      config,
+      logger: createLoggerFake(),
+      routers: createRouters(),
+    });
 
     await request(app).get("/health").expect(200, { status: "ok" });
   });

@@ -1,9 +1,37 @@
 import type { Connection, Pool } from "mysql2/promise";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "../../../src/database/database.js";
-import { readSetupConfig, runSetup } from "../../../src/setup.js";
+import {
+  assertSafeSetupTestDatabaseName,
+  readSetupCliOptions,
+  readSetupConfig,
+  runSetup,
+} from "../../../src/setup.js";
 
 describe("setup orchestration", () => {
+  it("selects an isolated .env.test environment for the test setup CLI", () => {
+    expect(readSetupCliOptions([])).toStrictEqual({});
+    expect(readSetupCliOptions(["--test"])).toStrictEqual({
+      environmentFile: ".env.test",
+      requireTestDatabase: true,
+    });
+  });
+
+  it("accepts only safe _test database names for the test setup CLI", () => {
+    expect(assertSafeSetupTestDatabaseName("call_center_app_test")).toBe(
+      "call_center_app_test",
+    );
+    expect(() => assertSafeSetupTestDatabaseName("call_center_app")).toThrow(
+      "must end with _test",
+    );
+    expect(() => assertSafeSetupTestDatabaseName("call-center-app_test")).toThrow(
+      "contains unsafe characters",
+    );
+    expect(() => assertSafeSetupTestDatabaseName(undefined)).toThrow(
+      "must end with _test",
+    );
+  });
+
   it("preserves setup defaults", () => {
     const config = readSetupConfig({ DB_NAME: "app_test" });
 

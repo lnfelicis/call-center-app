@@ -1,4 +1,4 @@
-import type { AuthUser } from "../../auth.js";
+import type { AuthUser } from "../auth/types.js";
 import type { ReportQuery, SearchQuery } from "./types.js";
 
 export function hasPermission(user: AuthUser | undefined, permission: string) {

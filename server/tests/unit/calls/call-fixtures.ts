@@ -1,4 +1,4 @@
-import type { AuthenticatedRequest } from "../../../src/auth.js";
+import type { AuthenticatedRequest } from "../../../src/modules/auth/types.js";
 import type {
   CallFormFieldRow,
   CallRow,

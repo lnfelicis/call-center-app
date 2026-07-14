@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuthenticatedRequest } from "../../../src/auth.js";
+import type { AuthenticatedRequest } from "../../../src/modules/auth/types.js";
 import { createReportController } from "../../../src/modules/reports/controller.js";
 import type { ReportService } from "../../../src/modules/reports/service.js";
 

@@ -1,11 +1,10 @@
-import { Router } from "express";
-import type { requireAuth, requirePermission } from "../../auth.js";
+import { Router, type RequestHandler } from "express";
 import type { SettingsController } from "./controller.js";
 
 export type SettingRoutesDependencies = {
   controller: SettingsController;
-  authenticate: typeof requireAuth;
-  authorize: typeof requirePermission;
+  authenticate: RequestHandler;
+  authorize: (permission: string) => RequestHandler;
 };
 
 export function createSettingRoutes(dependencies: SettingRoutesDependencies) {

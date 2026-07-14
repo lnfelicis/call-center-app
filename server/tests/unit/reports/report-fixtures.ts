@@ -1,4 +1,4 @@
-import type { AuthUser } from "../../../src/auth.js";
+import type { AuthUser } from "../../../src/modules/auth/types.js";
 import type {
   CallSearchRow,
   ReportCall,

@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import type { RequestHandler } from "express";
 import type { SettingsController } from "../../../src/modules/settings/controller.js";
 import { createSettingRoutes } from "../../../src/modules/settings/routes.js";
-import type { requireAuth, requirePermission } from "../../../src/auth.js";
 
 describe("createSettingRoutes", () => {
   it("registers the seven preserved settings routes behind one permission", () => {
     const handler = vi.fn();
-    const authenticate = vi.fn() as unknown as typeof requireAuth;
-    const authorize = vi.fn().mockReturnValue(handler) as unknown as typeof requirePermission;
+    const authenticate = vi.fn() as unknown as RequestHandler;
+    const authorize = vi.fn().mockReturnValue(handler) as unknown as (
+      permission: string,
+    ) => RequestHandler;
     const controller = {
       getSettings: handler,
       getSecurity: handler,

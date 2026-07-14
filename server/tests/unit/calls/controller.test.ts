@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import { describe, expect, it, vi } from "vitest";
-import type { AuthenticatedRequest } from "../../../src/auth.js";
+import type { AuthenticatedRequest } from "../../../src/modules/auth/types.js";
 import {
   createCallController,
   type CallControllerDependencies,

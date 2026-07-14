@@ -32,7 +32,7 @@ Dış HTTP API’sinde, veritabanı şemasında ve client sözleşmelerinde değ
 2. **Test edilebilir bootstrap ve altyapı sınırı**
 
    - `createApp(dependencies): Express` yalnız Express uygulamasını oluşturacak; listener açmayacak.
-   - `index.ts` composition root olarak kalacak, aynı port fallback’i ve `0.0.0.0` host’u ile sunucuyu başlatacak.
+   - `composition/app-routers.ts` explicit dependency wiring noktası olacak; `bootstrap.ts` aynı port fallback’i ve `0.0.0.0` host’u ile sunucuyu başlatacak, `index.ts` yalnız production env yükleyip bootstrap’ı çağıracak.
    - Config tek modülde toplanacak ancak bütün mevcut env coercion/default davranışları korunacak.
    - Global DB singleton yerine aynı pool ayarlarını kullanan `createPool(config)` fabrikası ve dar `Database`/`TransactionConnection` arayüzleri kullanılacak.
    - `SIGINT`/`SIGTERM` sırasında HTTP server kapatılacak, ardından pool sonlandırılacak; varsayılan kapanış timeout’u 10 saniye olacak.

@@ -1,6 +1,7 @@
 import type { ConnectionOptions } from "mysql2";
 import mysql, { type Connection } from "mysql2/promise";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readAppConfig } from "./config/app-config.js";
 import type { Database } from "./database/database.js";
@@ -11,8 +12,8 @@ import {
   extendedCallFormOptions,
   permissions,
   schemaStatements,
-} from "./schema.js";
-import { hashPassword } from "./security.js";
+} from "./database/schema.js";
+import { hashPassword } from "./modules/auth/security.js";
 import {
   defaultNotificationSettings,
   defaultPrivacySettings,
@@ -58,6 +59,38 @@ export type SetupDependencies = {
   generateId: () => string;
   output: Pick<Console, "log">;
 };
+
+export type SetupCliOptions = {
+  environmentFile?: string;
+  requireTestDatabase?: boolean;
+};
+
+export function readSetupCliOptions(args: string[] = process.argv.slice(2)): SetupCliOptions {
+  if (args.includes("--test")) {
+    return {
+      environmentFile: ".env.test",
+      requireTestDatabase: true,
+    };
+  }
+
+  return {};
+}
+
+export function assertSafeSetupTestDatabaseName(database: string | undefined) {
+  if (!database?.endsWith("_test")) {
+    throw new Error(
+      `Test database setup blocked: DB_NAME must end with _test (received ${database ?? "undefined"}).`,
+    );
+  }
+
+  if (!/^[A-Za-z0-9_]+_test$/.test(database)) {
+    throw new Error(
+      `Test database setup blocked: DB_NAME contains unsafe characters (received ${database}).`,
+    );
+  }
+
+  return database;
+}
 
 export function readSetupConfig(env: NodeJS.ProcessEnv = process.env): SetupConfig {
   const databaseServer: ConnectionOptions = {
@@ -282,12 +315,34 @@ export async function runSetup(config: SetupConfig, dependencies: SetupDependenc
   return admin;
 }
 
-export async function runSetupCli() {
+export async function runSetupCli(options: SetupCliOptions = {}) {
   const { config: loadEnvironment } = await import("dotenv");
-  loadEnvironment();
+  let environment = process.env;
 
-  const setupConfig = readSetupConfig();
-  const database = createPool(readAppConfig().database);
+  if (options.environmentFile) {
+    environment = {};
+    const result = loadEnvironment({
+      path: resolve(process.cwd(), options.environmentFile),
+      override: true,
+      quiet: true,
+      processEnv: environment,
+    });
+
+    if (result.error) {
+      throw new Error(
+        `Environment file could not be loaded: ${options.environmentFile} (${result.error.message})`,
+      );
+    }
+  } else {
+    loadEnvironment();
+  }
+
+  const setupConfig = readSetupConfig(environment);
+  if (options.requireTestDatabase) {
+    assertSafeSetupTestDatabaseName(setupConfig.databaseName);
+  }
+
+  const database = createPool(readAppConfig(environment).database);
 
   try {
     await runSetup(setupConfig, {
@@ -307,7 +362,7 @@ const executedDirectly = Boolean(
 );
 
 if (executedDirectly) {
-  runSetupCli().catch((error: unknown) => {
+  runSetupCli(readSetupCliOptions()).catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
   });

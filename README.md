@@ -84,6 +84,17 @@ Bu komut:
 
 Varsayılan giriş bilgileri `.env` dosyasındaki `SUPER_ADMIN_*` değerlerinden gelir.
 
+Test veritabanını manuel olarak hazırlamak için yalnızca `server/.env.test`
+dosyasını okuyan güvenli setup komutunu kullanın:
+
+```bash
+pnpm --filter server setup:test
+```
+
+Bu komut `DB_NAME` değerinin `_test` ile bitmesini ve yalnızca harf, rakam ile
+alt çizgi içermesini zorunlu tutar. Kontrol, herhangi bir MySQL bağlantısı
+kurulmadan önce yapılır; normal `server/.env` dosyası fallback olarak okunmaz.
+
 ## Geliştirme Ortamını Başlatma
 
 Server:
@@ -166,8 +177,10 @@ pnpm --filter server build
 Backend kaynakları feature-first olarak `server/src/modules/<feature>/` altında
 routes/controller, service, repository ve gerektiğinde policy/mapper katmanlarına
 ayrılmıştır. `server/src/app.ts` listener açmadan Express uygulamasını üretir;
-`server/src/index.ts` production ortamını yükleyip lifecycle/bootstrap katmanını
-başlatır.
+`server/src/composition/app-routers.ts` ortak bağımlılıkları type-safe feature
+factory'lerine bağlar. Production MySQL pool'u `server/src/bootstrap.ts` tarafından
+oluşturulur ve graceful shutdown sırasında aynı pool kapatılır. `server/src/index.ts`
+yalnız production ortamını yükleyip bootstrap katmanını başlatır.
 
 ## Production Çalıştırma
 

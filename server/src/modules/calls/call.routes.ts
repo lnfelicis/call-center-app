@@ -1,25 +1,13 @@
-import { randomUUID } from "node:crypto";
-import { Router } from "express";
-import {
-  requireAnyPermission,
-  requireAuth,
-  requirePermission,
-} from "../../auth.js";
-import { writeAuditLog } from "../../audit.js";
-import { db } from "../../db.js";
-import { notifyUsersWithAnyPermission } from "../../notifications.js";
-import { getClientIp } from "../../requestIp.js";
-import { readAppSetting } from "../../settings.js";
+import { Router, type RequestHandler } from "express";
 import {
   createCallController,
   type CallControllerDependencies,
 } from "./call.controller.js";
-import { createMySqlCallRepository } from "./call.repository.js";
 
 export type CallRoutesDependencies = CallControllerDependencies & {
-  requireAuth: typeof requireAuth;
-  requireAnyPermission: typeof requireAnyPermission;
-  requirePermission: typeof requirePermission;
+  requireAuth: RequestHandler;
+  requireAnyPermission: (permissions: string[]) => RequestHandler;
+  requirePermission: (permission: string) => RequestHandler;
 };
 
 export function createCallRoutes(dependencies: CallRoutesDependencies) {
@@ -97,18 +85,3 @@ export function createCallRoutes(dependencies: CallRoutesDependencies) {
 
   return router;
 }
-
-const idGenerator = randomUUID;
-
-export const callRoutes = createCallRoutes({
-  repository: createMySqlCallRepository(db, idGenerator),
-  auditWriter: writeAuditLog,
-  notificationPublisher: notifyUsersWithAnyPermission,
-  notificationSettingsReader: (key) => readAppSetting(key),
-  clientIpReader: getClientIp,
-  idGenerator,
-  clock: () => new Date(),
-  requireAuth,
-  requireAnyPermission,
-  requirePermission,
-});

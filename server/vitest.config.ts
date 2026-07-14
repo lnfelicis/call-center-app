@@ -15,11 +15,9 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: [
         "src/**/*.d.ts",
-        "src/schema.ts",
+        "src/database/schema.ts",
         "src/index.ts",
         "src/setup.ts",
-        "src/routes/**",
-        "src/{audit,auth,db,notifications,requestIp,security,settings}.ts",
         "src/modules/**/types.ts",
         "src/modules/**/*.types.ts",
         "src/modules/**/routes.ts",

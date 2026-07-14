@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     host: "0.0.0.0",
     logLevel: "silent",
     shutdownTimeoutMs: 100,
+    database: { marker: "default-database-config" },
   };
   const readAppConfig = vi.fn(() => defaultConfig);
   const defaultDatabase = { end: vi.fn().mockResolvedValue(undefined) };
@@ -32,6 +33,9 @@ const mocks = vi.hoisted(() => {
     error: vi.fn(),
   };
   const createLogger = vi.fn(() => defaultLogger);
+  const defaultRouters = { marker: "default-routers" };
+  const createPool = vi.fn(() => defaultDatabase);
+  const createAppRouters = vi.fn(() => defaultRouters);
 
   return {
     closeCallbacks,
@@ -43,12 +47,18 @@ const mocks = vi.hoisted(() => {
     defaultDatabase,
     defaultLogger,
     createLogger,
+    defaultRouters,
+    createPool,
+    createAppRouters,
   };
 });
 
 vi.mock("../../../src/app.js", () => ({ createApp: mocks.createApp }));
+vi.mock("../../../src/composition/app-routers.js", () => ({
+  createAppRouters: mocks.createAppRouters,
+}));
 vi.mock("../../../src/config/app-config.js", () => ({ readAppConfig: mocks.readAppConfig }));
-vi.mock("../../../src/db.js", () => ({ db: mocks.defaultDatabase }));
+vi.mock("../../../src/database/mysql.js", () => ({ createPool: mocks.createPool }));
 vi.mock("../../../src/http/logger.js", () => ({ createLogger: mocks.createLogger }));
 
 import { startServer } from "../../../src/bootstrap.js";
@@ -91,9 +101,14 @@ describe("bootstrap branches", () => {
 
     expect(mocks.readAppConfig).toHaveBeenCalledOnce();
     expect(mocks.createLogger).toHaveBeenCalledWith("silent");
+    expect(mocks.createPool).toHaveBeenCalledWith(mocks.defaultConfig.database);
+    expect(mocks.createAppRouters).toHaveBeenCalledWith({
+      database: mocks.defaultDatabase,
+    });
     expect(mocks.createApp).toHaveBeenCalledWith({
       config: mocks.defaultConfig,
       logger: mocks.defaultLogger,
+      routers: mocks.defaultRouters,
     });
     expect(mocks.listen).toHaveBeenCalledWith(3000, "0.0.0.0", expect.any(Function));
     expect(mocks.defaultLogger.info).toHaveBeenCalledWith(
@@ -134,8 +149,35 @@ describe("bootstrap branches", () => {
     await first;
 
     expect(logger.info).toHaveBeenCalledWith({ signal: "manual" }, "Server shutdown started");
+    expect(mocks.createPool).not.toHaveBeenCalled();
+    expect(mocks.createAppRouters).toHaveBeenCalledWith({ database });
     expect(database.end).toHaveBeenCalledOnce();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("uses explicitly supplied routers without running default composition", async () => {
+    const logger = createLoggerFake();
+    const database = { end: vi.fn().mockResolvedValue(undefined) } as unknown as Database;
+    const routers = { marker: "injected-routers" } as never;
+    const running = startServer({
+      config: createConfig(),
+      database,
+      logger,
+      routers,
+      installSignalHandlers: false,
+    });
+
+    expect(mocks.createAppRouters).not.toHaveBeenCalled();
+    expect(mocks.createApp).toHaveBeenCalledWith({
+      config: expect.any(Object),
+      logger,
+      routers,
+    });
+
+    const shutdown = running.shutdown("test");
+    mocks.closeCallbacks[0]?.();
+    await shutdown;
+    expect(database.end).toHaveBeenCalledOnce();
   });
 
   it("force-closes timed-out connections and logs database and HTTP close failures", async () => {

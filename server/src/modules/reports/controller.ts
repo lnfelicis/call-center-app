@@ -1,5 +1,5 @@
 import type { Response } from "express";
-import type { AuthenticatedRequest } from "../../auth.js";
+import type { AuthenticatedRequest } from "../auth/types.js";
 import type { ReportService } from "./service.js";
 import type { ReportQuery } from "./types.js";
 

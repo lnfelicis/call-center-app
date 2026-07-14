@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import type { RowDataPacket } from "mysql2";
-import type { AuthUser } from "../../auth.js";
-import type { Database } from "../../db.js";
+import type { Database } from "../../database/database.js";
+import type { AuthUser } from "../auth/types.js";
 
 export type ReportDatabase = Pick<Database, "query">;
 

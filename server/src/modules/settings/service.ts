@@ -9,12 +9,12 @@ import {
   prepareSettingsUpdate,
 } from "./settings.policy.js";
 import type { SettingsRepository } from "./repository.js";
-import type { readAppSetting, writeAppSetting } from "../../settings.js";
+import type { AppSettingsService } from "./app-settings.service.js";
 
 export type SettingsServiceDependencies = {
   repository: SettingsRepository;
-  readSetting: typeof readAppSetting;
-  writeSetting: typeof writeAppSetting;
+  readSetting: AppSettingsService["read"];
+  writeSetting: AppSettingsService["write"];
   audit: AuditWriter;
   generateId: () => string;
 };

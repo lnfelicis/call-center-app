@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Response } from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import type { AuthenticatedRequest } from "../../../src/auth.js";
+import type { AuthenticatedRequest } from "../../../src/modules/auth/types.js";
 import {
   createCallRoutes,
   type CallRoutesDependencies,

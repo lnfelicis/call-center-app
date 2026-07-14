@@ -1,4 +1,4 @@
-import type { AuthUser } from "../../auth.js";
+import type { AuthUser } from "../auth/types.js";
 import { hasPermission, maskPhone, maskTc } from "./policy.js";
 import type {
   BreakdownRow,

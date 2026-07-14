@@ -1,7 +1,9 @@
 import type { Server } from "node:http";
-import { createApp } from "./app.js";
+import { createApp, type AppRouters } from "./app.js";
+import { createAppRouters } from "./composition/app-routers.js";
 import { readAppConfig, type AppConfig } from "./config/app-config.js";
-import { db, type Database } from "./db.js";
+import type { Database } from "./database/database.js";
+import { createPool } from "./database/mysql.js";
 import { createLogger, type AppLogger } from "./http/logger.js";
 
 export type RunningServer = {
@@ -13,14 +15,16 @@ type StartServerOptions = {
   config?: AppConfig;
   database?: Database;
   logger?: AppLogger;
+  routers?: AppRouters;
   installSignalHandlers?: boolean;
 };
 
 export function startServer(options: StartServerOptions = {}): RunningServer {
   const config = options.config ?? readAppConfig();
-  const database = options.database ?? db;
+  const database = options.database ?? createPool(config.database);
   const logger = options.logger ?? createLogger(config.logLevel);
-  const app = createApp({ config, logger });
+  const routers = options.routers ?? createAppRouters({ database });
+  const app = createApp({ config, logger, routers });
   const server = app.listen(config.port, config.host, () => {
     logger.info({ port: config.port }, `Server is running on http://localhost:${config.port}`);
   });

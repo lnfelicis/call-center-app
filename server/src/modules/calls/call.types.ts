@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import type { RowDataPacket } from "mysql2/promise";
-import type { AuthenticatedRequest } from "../../auth.js";
 import type { Database } from "../../database/database.js";
+import type { AuthenticatedRequest } from "../auth/types.js";
 
 export type CallPriority = string;
 export type CallStatus = string;

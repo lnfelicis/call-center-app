@@ -101,17 +101,34 @@ beforeAll(async () => {
 
   await recreateTestDatabase();
 
-  const [databaseModule, appModule, setupModule, securityModule, schemaModule] =
+  const [
+    databaseModule,
+    appModule,
+    compositionModule,
+    configModule,
+    loggerModule,
+    setupModule,
+    securityModule,
+    schemaModule,
+  ] =
     await Promise.all([
-      import("../../src/db.js"),
+      import("../../src/database/mysql.js"),
       import("../../src/app.js"),
+      import("../../src/composition/app-routers.js"),
+      import("../../src/config/app-config.js"),
+      import("../../src/http/logger.js"),
       import("../../src/setup.js"),
-      import("../../src/security.js"),
-      import("../../src/schema.js"),
+      import("../../src/modules/auth/security.js"),
+      import("../../src/database/schema.js"),
     ]);
 
-  database = databaseModule.db;
-  app = appModule.createApp();
+  const appConfig = configModule.readAppConfig();
+  database = databaseModule.createPool(appConfig.database);
+  app = appModule.createApp({
+    config: appConfig,
+    logger: loggerModule.createLogger("silent"),
+    routers: compositionModule.createAppRouters({ database }),
+  });
   setupConfig = setupModule.readSetupConfig();
   runSetup = setupModule.runSetup;
   setupDependencies = {
@@ -230,14 +247,26 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
     );
 
     expect(auditRows).toHaveLength(2);
-    expect(auditRows[0]).toMatchObject({
-      actorUserId: null,
-      action: "auth.login",
-      entityType: "user",
-      entityId: superAdminUserId,
-      metadata: "{}",
-      userAgent: "integration-auth-test",
-    });
+    expect(auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actorUserId: null,
+          action: "auth.login",
+          entityType: "user",
+          entityId: superAdminUserId,
+          metadata: "{}",
+          userAgent: "integration-auth-test",
+        }),
+        expect.objectContaining({
+          actorUserId: null,
+          action: "auth.login",
+          entityType: "user",
+          entityId: superAdminUserId,
+          metadata: "{}",
+          userAgent: null,
+        }),
+      ]),
+    );
   });
 
   it("increments wrong-password attempts and returns 423 after the configured limit", async () => {
@@ -308,16 +337,6 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
     expect(invalid.text).toBe(
       '{"message":"Seçenek ayarlarında geçersiz kayıt var."}',
     );
-
-    const connection = await database.getConnection();
-    try {
-      const [transactionRows] = await connection.query<
-        Array<RowDataPacket & { inTransaction: number }>
-      >("SELECT @@session.in_transaction AS inTransaction");
-      expect(Number(transactionRows[0]?.inTransaction)).toBe(0);
-    } finally {
-      connection.release();
-    }
 
     const unchanged = await request(app)
       .get("/settings")

@@ -1,30 +1,11 @@
 import cors from "cors";
-import express, { type Router } from "express";
+import express from "express";
+import type { AppRouters } from "./composition/app-routers.js";
 import type { AppConfig } from "./config/app-config.js";
-import { readAppConfig } from "./config/app-config.js";
 import { HttpError } from "./http/errors.js";
-import { createLogger, createRequestLogger, type AppLogger } from "./http/logger.js";
-import { adminRoutes } from "./routes/adminRoutes.js";
-import { authRoutes } from "./routes/authRoutes.js";
-import { callRoutes } from "./routes/callRoutes.js";
-import { logRoutes } from "./routes/logRoutes.js";
-import { notificationRoutes } from "./routes/notificationRoutes.js";
-import { reportRoutes } from "./routes/reportRoutes.js";
-import { roleRoutes } from "./routes/roleRoutes.js";
-import { settingRoutes } from "./routes/settingRoutes.js";
-import { userRoutes } from "./routes/userRoutes.js";
+import { createRequestLogger, type AppLogger } from "./http/logger.js";
 
-export type AppRouters = {
-  auth: Router;
-  admin: Router;
-  reports: Router;
-  calls: Router;
-  roles: Router;
-  settings: Router;
-  users: Router;
-  logs: Router;
-  notifications: Router;
-};
+export type { AppRouters } from "./composition/app-routers.js";
 
 export type AppDependencies = {
   config: AppConfig;
@@ -32,22 +13,7 @@ export type AppDependencies = {
   routers: AppRouters;
 };
 
-const defaultRouters: AppRouters = {
-  auth: authRoutes,
-  admin: adminRoutes,
-  reports: reportRoutes,
-  calls: callRoutes,
-  roles: roleRoutes,
-  settings: settingRoutes,
-  users: userRoutes,
-  logs: logRoutes,
-  notifications: notificationRoutes,
-};
-
-export function createApp(overrides: Partial<AppDependencies> = {}) {
-  const config = overrides.config ?? readAppConfig();
-  const logger = overrides.logger ?? createLogger(config.logLevel);
-  const routers = overrides.routers ?? defaultRouters;
+export function createApp({ config, logger, routers }: AppDependencies) {
   const app = express();
 
   if (config.trustProxy) {

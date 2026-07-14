@@ -939,7 +939,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
           />
           <Stat icon={<FileText />} label={`${listSummary.followUp} takip`} />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <div className="flex rounded-lg border bg-background p-1">
             <Button
               type="button"

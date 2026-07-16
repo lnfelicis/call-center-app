@@ -35,7 +35,7 @@ export function readAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     port: Number(env.PORT) || 3000,
     host: "0.0.0.0",
-    trustProxy: env.RENDER === "true",
+    trustProxy: env.TRUST_PROXY === "true" || env.RENDER === "true",
     shutdownTimeoutMs: 10_000,
     logLevel: env.LOG_LEVEL || (env.NODE_ENV === "test" ? "silent" : "info"),
     database,

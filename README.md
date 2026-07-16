@@ -216,3 +216,67 @@ yeniden kontrol edilir. Açık bir oturum izin verilmeyen bir IP'ye geçerse ist
 API isteğinde veya en geç 60 saniyelik oturum kontrolünde otomatik olarak çıkış yapar.
 Oturum token'ı giriş yapılan IP adresine bağlıdır; bu adres izin listesinden
 çıkarıldığında token başka bir istek IP'si raporlansa bile geçersiz sayılır.
+
+## Docker ile Production Ortamı
+
+Docker Engine çalışır durumdayken örnek ortam dosyasını kopyalayın:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Linux veya macOS üzerinde:
+
+```bash
+cp .env.example .env
+```
+
+`.env` içindeki veritabanı, token ve yönetici parolalarını production ortamında
+kullanmadan önce güçlü ve benzersiz değerlerle değiştirin. Bu dosya Git tarafından
+izlenmez.
+
+İmajları oluşturun:
+
+```bash
+docker compose build
+```
+
+İlk çalıştırmada veritabanı şemasını ve başlangıç verilerini hazırlayın:
+
+```bash
+docker compose run --rm setup
+```
+
+Servisleri arka planda başlatın:
+
+```bash
+docker compose up -d
+```
+
+Uygulama varsayılan olarak `http://localhost:8080` adresinde çalışır. Dış portu
+değiştirmek için `.env` içindeki `APP_PORT` değerini güncelleyin. Backend sağlık
+kontrolüne `http://localhost:8080/api/health` adresinden erişilebilir.
+
+Servis durumlarını ve logları görüntülemek için:
+
+```bash
+docker compose ps
+docker compose logs -f
+```
+
+Servisleri durdurmak için:
+
+```bash
+docker compose down
+```
+
+MySQL verileri `mysql-data` volume'unda korunur. Aşağıdaki komut volume'u ve tüm
+veritabanı verilerini kalıcı olarak siler; yalnızca temiz kurulum istendiğinde kullanın:
+
+```bash
+docker compose down --volumes
+```
+
+Şema güncellemesi veya seed işleminin yeniden çalıştırılması gerektiğinde `setup`
+komutunu tekrar açıkça çağırın. Normal container restartları setup işlemini otomatik
+olarak tekrarlamaz.

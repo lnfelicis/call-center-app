@@ -13,6 +13,7 @@ import {
   permissions,
   schemaStatements,
 } from "./database/schema.js";
+import { SUPER_ADMIN_ROLE_ID, SUPER_ADMIN_USER_ID } from "./database/system-identities.js";
 import { hashPassword } from "./modules/auth/security.js";
 import {
   defaultNotificationSettings,
@@ -20,8 +21,6 @@ import {
   defaultSecuritySettings,
 } from "./modules/settings/app-settings.types.js";
 
-const superAdminRoleId = "00000000-0000-4000-8000-000000000001";
-const superAdminUserId = "00000000-0000-4000-8000-000000000002";
 const defaultOptionColors: Record<string, string> = {
   open: "#2563eb",
   in_progress: "#7c3aed",
@@ -193,14 +192,14 @@ async function seedSuperAdminRole(database: Database) {
       description = VALUES(description),
       is_system = 1,
       is_active = 1`,
-    [superAdminRoleId],
+    [SUPER_ADMIN_ROLE_ID],
   );
 
-  await database.query("DELETE FROM role_permissions WHERE role_id = ?", [superAdminRoleId]);
+  await database.query("DELETE FROM role_permissions WHERE role_id = ?", [SUPER_ADMIN_ROLE_ID]);
 
   for (const permission of permissions) {
     await database.query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", [
-      superAdminRoleId,
+      SUPER_ADMIN_ROLE_ID,
       permission.id,
     ]);
   }
@@ -270,12 +269,12 @@ async function seedSuperAdminUser(
       role_id = VALUES(role_id),
       status = 'active'`,
     [
-      superAdminUserId,
+      SUPER_ADMIN_USER_ID,
       username,
       fullName,
       email,
       await dependencies.hashPassword(password),
-      superAdminRoleId,
+      SUPER_ADMIN_ROLE_ID,
     ],
   );
 
@@ -285,8 +284,8 @@ async function seedSuperAdminUser(
     VALUES (?, ?, 'seed.super_admin', 'user', ?, ?)`,
     [
       dependencies.generateId(),
-      superAdminUserId,
-      superAdminUserId,
+      SUPER_ADMIN_USER_ID,
+      SUPER_ADMIN_USER_ID,
       JSON.stringify({ username, role: "Süper Admin" }),
     ],
   );

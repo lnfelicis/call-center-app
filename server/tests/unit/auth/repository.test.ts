@@ -97,5 +97,11 @@ describe("auth repository", () => {
       roleName: "Yönetici",
       permissions: ["users.manage", "logs.view"],
     });
+    expect(database.query).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "LEFT JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id",
+      ),
+      ["user-1"],
+    );
   });
 });

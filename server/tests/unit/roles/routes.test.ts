@@ -25,6 +25,7 @@ describe("role routes", () => {
 
     expect(router).toBeDefined();
     expect(requireAnyPermission).toHaveBeenCalledWith(["roles.manage", "users.manage"]);
-    expect(requirePermission).toHaveBeenCalledTimes(4);
+    expect(requireAnyPermission).toHaveBeenCalledTimes(2);
+    expect(requirePermission).toHaveBeenCalledTimes(3);
   });
 });

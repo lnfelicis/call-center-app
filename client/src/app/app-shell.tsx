@@ -111,6 +111,7 @@ export function AppShell() {
             <UsersModule
               users={panel.users}
               roles={panel.roles}
+              permissionsByGroup={panel.permissionsByGroup}
               userForm={panel.userForm}
               isLoading={panel.isLoading}
               onUserFormChange={panel.setUserForm}

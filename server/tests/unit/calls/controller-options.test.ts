@@ -283,7 +283,10 @@ describe("call controller options and assignees", () => {
     await harness.controller.getAssignees(createControllerRequest(), response);
 
     expect(harness.query).toHaveBeenCalledWith(expect.stringContaining(
-      "WHERE status = 'active'",
+      "WHERE users.status = 'active'",
+    ));
+    expect(harness.query).toHaveBeenCalledWith(expect.stringContaining(
+      "INNER JOIN effective_user_permissions",
     ));
     expect(response.json).toHaveBeenCalledWith({
       users: [{ id: "user-2", fullName: "Agent Two", username: "agent2" }],

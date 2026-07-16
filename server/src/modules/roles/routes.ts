@@ -20,7 +20,11 @@ export function createRoleRoutes({
   const router = Router();
 
   router.use(requireAuth);
-  router.get("/permissions", requirePermission("roles.manage"), controller.permissions);
+  router.get(
+    "/permissions",
+    requireAnyPermission(["roles.manage", "users.manage"]),
+    controller.permissions,
+  );
   router.get(
     "/roles",
     requireAnyPermission(["roles.manage", "users.manage"]),

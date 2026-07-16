@@ -1,11 +1,16 @@
 import type { Request } from "express";
+import { SUPER_ADMIN_USER_ID } from "../../database/system-identities.js";
+import { HttpError } from "../../http/errors.js";
 import type { AuditWriter } from "../audit/types.js";
 import { mapUserRow } from "./mapper.js";
 import type { UserRepository } from "./repository.js";
-import type { CreateUserInput, UpdateUserInput } from "./types.js";
+import type { CreateUserInput, PermissionOverride, UpdateUserInput } from "./types.js";
 
 export type UserServiceDependencies = {
-  repository: Pick<UserRepository, "listActive" | "listAll" | "create" | "update">;
+  repository: Pick<
+    UserRepository,
+    "listActive" | "listAll" | "permissionIdsExist" | "create" | "update"
+  >;
   idGenerator: () => string;
   hashPassword: (password: string) => Promise<string>;
   writeAuditLog: AuditWriter;
@@ -23,6 +28,7 @@ export class UserService {
   }
 
   async create(req: Request, input: CreateUserInput) {
+    await this.assertPermissionIdsExist(input.permissionOverrides);
     const userId = this.dependencies.idGenerator();
     const passwordHash = await this.dependencies.hashPassword(input.password);
 
@@ -32,16 +38,35 @@ export class UserService {
       action: "user.create",
       entityType: "user",
       entityId: userId,
-      metadata: { username: input.username, email: input.email, roleId: input.roleId },
+      metadata: {
+        username: input.username,
+        email: input.email,
+        roleId: input.roleId,
+        permissionOverrides: input.permissionOverrides,
+      },
     });
+
+    if (input.permissionOverrides.length > 0) {
+      await this.writePermissionOverrideAudit(req, userId, input.roleId, input.permissionOverrides);
+    }
 
     return userId;
   }
 
   async update(req: Request, input: UpdateUserInput) {
-    const affectedRows = await this.dependencies.repository.update(input);
+    if (input.userId === SUPER_ADMIN_USER_ID && (input.permissionOverrides?.length ?? 0) > 0) {
+      throw new HttpError(400, {
+        message: "Ana Süper Admin hesabının izinleri özelleştirilemez.",
+      });
+    }
 
-    if (affectedRows === 0) {
+    if (input.permissionOverrides !== undefined) {
+      await this.assertPermissionIdsExist(input.permissionOverrides);
+    }
+
+    const result = await this.dependencies.repository.update(input);
+
+    if (result.affectedRows === 0) {
       return false;
     }
 
@@ -53,6 +78,45 @@ export class UserService {
       metadata: { email: input.email, roleId: input.roleId, status: input.status },
     });
 
+    if (input.permissionOverrides !== undefined || result.roleChanged) {
+      await this.writePermissionOverrideAudit(
+        req,
+        input.userId,
+        input.roleId,
+        input.permissionOverrides ?? [],
+      );
+    }
+
     return true;
+  }
+
+  private async assertPermissionIdsExist(overrides: PermissionOverride[]) {
+    const permissionIds = overrides.map(({ permissionId }) => permissionId);
+    if (!(await this.dependencies.repository.permissionIdsExist(permissionIds))) {
+      throw new HttpError(400, { message: "Geçersiz izin kimliği gönderildi." });
+    }
+  }
+
+  private async writePermissionOverrideAudit(
+    req: Request,
+    userId: string,
+    roleId: string,
+    overrides: PermissionOverride[],
+  ) {
+    await this.dependencies.writeAuditLog({
+      req,
+      action: "user.permission_overrides.update",
+      entityType: "user",
+      entityId: userId,
+      metadata: {
+        roleId,
+        grantedPermissions: overrides
+          .filter(({ effect }) => effect === "allow")
+          .map(({ permissionId }) => permissionId),
+        deniedPermissions: overrides
+          .filter(({ effect }) => effect === "deny")
+          .map(({ permissionId }) => permissionId),
+      },
+    });
   }
 }

@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { parsePermissionOverrides } from "./policy.js";
 import type { UserService } from "./service.js";
 
 export type UserControllerDependencies = {
@@ -23,11 +24,19 @@ export class UserController {
     const email = String(req.body.email ?? "").trim();
     const password = String(req.body.password ?? "");
     const roleId = String(req.body.roleId ?? "");
+    const parsedOverrides = parsePermissionOverrides(req.body.permissionOverrides ?? [], {
+      optional: false,
+    });
 
     if (!username || !fullName || !email || !password || !roleId) {
       res.status(400).json({
         message: "Kullanıcı adı, ad soyad, e-posta, şifre ve rol zorunludur.",
       });
+      return;
+    }
+
+    if (!parsedOverrides.valid || parsedOverrides.value === undefined) {
+      res.status(400).json({ message: "Kullanıcı izin istisnaları geçersiz." });
       return;
     }
 
@@ -44,6 +53,7 @@ export class UserController {
       email,
       password,
       roleId,
+      permissionOverrides: parsedOverrides.value,
     });
 
     res.status(201).json({ id: userId });
@@ -55,9 +65,18 @@ export class UserController {
     const email = String(req.body.email ?? "").trim();
     const roleId = String(req.body.roleId ?? "");
     const status = req.body.status === "passive" ? "passive" : "active";
+    const parsedOverrides = parsePermissionOverrides(req.body.permissionOverrides, {
+      optional: true,
+    });
 
     if (!fullName || !email || !roleId) {
       res.status(400).json({ message: "Ad soyad, e-posta ve rol zorunludur." });
+      return;
+    }
+
+
+    if (!parsedOverrides.valid) {
+      res.status(400).json({ message: "Kullanıcı izin istisnaları geçersiz." });
       return;
     }
 
@@ -67,6 +86,9 @@ export class UserController {
       email,
       roleId,
       status,
+      ...(parsedOverrides.value === undefined
+        ? {}
+        : { permissionOverrides: parsedOverrides.value }),
     });
 
     if (!updated) {

@@ -28,6 +28,7 @@ const emptyUserForm: UserForm = {
   email: "",
   password: "",
   roleId: "",
+  permissionOverrides: [],
 }
 
 export function useAdminPanel() {
@@ -134,7 +135,7 @@ export function useAdminPanel() {
         const canViewNotifications = userPermissions.includes("notifications.view")
         const canUseCalls = userPermissions.some((permission) => permission.startsWith("calls."))
         const [permissionData, roleData, userData] = await Promise.all([
-          canManageRoles
+          canManageRoles || canManageUsers
             ? fetchPanelData("/permissions")
             : Promise.resolve({ permissions: [] }),
           canManageRoles || canManageUsers
@@ -383,7 +384,10 @@ export function useAdminPanel() {
 
   async function updateUser(
     userId: string,
-    payload: Pick<ManagedUser, "fullName" | "email" | "roleId" | "status">,
+    payload: Pick<
+      ManagedUser,
+      "fullName" | "email" | "roleId" | "status" | "permissionOverrides"
+    >,
   ) {
     setIsLoading(true)
     setMessage("")

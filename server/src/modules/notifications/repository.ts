@@ -21,10 +21,10 @@ export class NotificationRepository {
       `SELECT DISTINCT users.id
       FROM users
       INNER JOIN roles ON roles.id = users.role_id
-      INNER JOIN role_permissions ON role_permissions.role_id = roles.id
+      INNER JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id
       WHERE users.status = 'active'
         AND roles.is_active = 1
-        AND role_permissions.permission_id IN (${placeholders})`,
+        AND effective_user_permissions.permission_id IN (${placeholders})`,
       permissionIds,
     );
 

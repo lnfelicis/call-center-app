@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -256,13 +257,13 @@ export function UsersModule({
         open={Boolean(editingUser)}
         onOpenChange={(open) => !open && setEditingUser(null)}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col overflow-hidden sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Kullanıcıyı düzenle</DialogTitle>
           </DialogHeader>
           {editingUser && (
             <form
-              className="grid gap-4"
+              className="flex min-h-0 flex-1 flex-col gap-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 onUpdateUser(editingUser.id, {
@@ -275,7 +276,8 @@ export function UsersModule({
                 setEditingUser(null);
               }}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
+              <DialogBody className="flex flex-col gap-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Ad soyad" htmlFor="edit-full-name">
                   <Input
                     id="edit-full-name"
@@ -303,8 +305,8 @@ export function UsersModule({
                     }
                   />
                 </Field>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label>Rol</Label>
                   <Select
@@ -354,19 +356,20 @@ export function UsersModule({
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <UserPermissionOverrides
-                idPrefix={`edit-user-permission-${editingUser.id}`}
-                permissionsByGroup={permissionsByGroup}
-                role={roles.find((role) => role.id === editingUser.roleId)}
-                overrides={editingUser.permissionOverrides}
-                disabled={editingUser.id === superAdminUserId}
-                onChange={(permissionOverrides) =>
-                  setEditingUser((current) =>
-                    current ? { ...current, permissionOverrides } : current,
-                  )
-                }
-              />
+                </div>
+                <UserPermissionOverrides
+                  idPrefix={`edit-user-permission-${editingUser.id}`}
+                  permissionsByGroup={permissionsByGroup}
+                  role={roles.find((role) => role.id === editingUser.roleId)}
+                  overrides={editingUser.permissionOverrides}
+                  disabled={editingUser.id === superAdminUserId}
+                  onChange={(permissionOverrides) =>
+                    setEditingUser((current) =>
+                      current ? { ...current, permissionOverrides } : current,
+                    )
+                  }
+                />
+              </DialogBody>
               <DialogFooter>
                 <Button
                   type="button"

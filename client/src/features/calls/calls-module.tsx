@@ -26,6 +26,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -149,6 +150,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState("summary");
   const [createError, setCreateError] = useState("");
   const [editError, setEditError] = useState("");
   const [createFieldErrors, setCreateFieldErrors] = useState<CallFormErrors>(
@@ -752,6 +754,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     setEditError("");
     setEditFieldErrors({});
     setEditForm(callToForm(call));
+    setDetailTab("summary");
     setIsDetailOpen(true);
   }
 
@@ -776,6 +779,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     }
 
     setSelectedCallId(callId);
+    setDetailTab("summary");
     setIsDetailOpen(true);
     void loadCallDetail(callId);
   }
@@ -1190,8 +1194,14 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
         </CardContent>
       </Card>
 
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-5xl">
+      <Dialog
+        open={isDetailOpen}
+        onOpenChange={(open) => {
+          setIsDetailOpen(open);
+          if (!open) setDetailTab("summary");
+        }}
+      >
+        <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col overflow-hidden sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {selectedCall?.recordNumber ?? "Çağrı Detayı"}
@@ -1201,8 +1211,9 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
               doğrudan güncelleyin.
             </DialogDescription>
           </DialogHeader>
-          {selectedCall ? (
-            <div className="grid gap-4">
+          <DialogBody>
+            {selectedCall ? (
+              <div className="grid gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">
                   {selectedCall.category} · {selectedCall.interactionType} ·{" "}
@@ -1217,7 +1228,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                 />
               </div>
 
-              <Tabs defaultValue="summary">
+              <Tabs value={detailTab} onValueChange={setDetailTab}>
                 <TabsList className="w-full justify-start overflow-x-auto">
                   <TabsTrigger value="summary">Özet ve Bilgiler</TabsTrigger>
                   <TabsTrigger value="notes">Notlar</TabsTrigger>
@@ -1282,7 +1293,12 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                       </Button>
                     </form>
                   )}
-                  <form className="grid gap-4" onSubmit={updateCall} noValidate>
+                  <form
+                    id="call-detail-edit-form"
+                    className="grid gap-4"
+                    onSubmit={updateCall}
+                    noValidate
+                  >
                     {editError && (
                       <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                         {editError}
@@ -1580,13 +1596,6 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                           )}
                       </div>
                     )}
-                    {canEdit && !selectedCall.isLocked && (
-                      <DialogFooter>
-                        <Button type="submit" disabled={isLoading}>
-                          Kaydet
-                        </Button>
-                      </DialogFooter>
-                    )}
                   </form>
                 </TabsContent>
 
@@ -1786,17 +1795,32 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                   )}
                 </TabsContent>
               </Tabs>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Detay görmek için bir çağrı kaydı seçin.
-            </p>
-          )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Detay görmek için bir çağrı kaydı seçin.
+              </p>
+            )}
+          </DialogBody>
+          {selectedCall &&
+            detailTab === "summary" &&
+            canEdit &&
+            !selectedCall.isLocked && (
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  form="call-detail-edit-form"
+                  disabled={isLoading}
+                >
+                  Kaydet
+                </Button>
+              </DialogFooter>
+            )}
         </DialogContent>
       </Dialog>
 
       <Dialog open={isCreateOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col overflow-hidden sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Yeni Çağrı Kaydı</DialogTitle>
             <DialogDescription>
@@ -1804,7 +1828,12 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
               değiştirilemez.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4" onSubmit={createCall} noValidate>
+          <form
+            className="flex min-h-0 flex-1 flex-col gap-4"
+            onSubmit={createCall}
+            noValidate
+          >
+            <DialogBody className="flex flex-col gap-4">
             {createError && (
               <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {createError}
@@ -2055,6 +2084,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                 )}
               </div>
             )}
+            </DialogBody>
             <DialogFooter>
               <Button
                 type="button"

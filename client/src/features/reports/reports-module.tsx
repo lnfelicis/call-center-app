@@ -87,13 +87,27 @@ export function ReportsModule({
     (option) => option.type === "priority" && option.isActive,
   );
 
-  const optionLabel = useCallback((type: CallFormOption["type"], value: string) => {
-    return filterOptions.find((option) => option.type === type && option.value === value)?.label ?? value;
-  }, [filterOptions]);
+  const optionLabel = useCallback(
+    (type: CallFormOption["type"], value: string) => {
+      return (
+        filterOptions.find(
+          (option) => option.type === type && option.value === value,
+        )?.label ?? value
+      );
+    },
+    [filterOptions],
+  );
 
-  const optionColor = useCallback((type: CallFormOption["type"], value: string) => {
-    return filterOptions.find((option) => option.type === type && option.value === value)?.color ?? null;
-  }, [filterOptions]);
+  const optionColor = useCallback(
+    (type: CallFormOption["type"], value: string) => {
+      return (
+        filterOptions.find(
+          (option) => option.type === type && option.value === value,
+        )?.color ?? null
+      );
+    },
+    [filterOptions],
+  );
 
   const loadReports = useCallback(async () => {
     setIsLoading(true);
@@ -134,7 +148,10 @@ export function ReportsModule({
       {
         id: "recordNumber",
         header: "Çağrı Kayıt No",
-        size: 180,
+        size: 260,
+        minSize: 240,
+        maxSize: 320,
+        className: "whitespace-nowrap",
         cell: (call) => (
           <span className="font-medium text-foreground">
             {call.recordNumber}
@@ -191,7 +208,9 @@ export function ReportsModule({
           <OptionBadge
             label={optionLabel("priority", call.priority)}
             color={optionColor("priority", call.priority)}
-            fallbackVariant={call.priority === "urgent" ? "default" : "secondary"}
+            fallbackVariant={
+              call.priority === "urgent" ? "default" : "secondary"
+            }
           />
         ),
         accessor: (call) => optionLabel("priority", call.priority),
@@ -416,10 +435,7 @@ function FilterInput({
   return (
     <div className="grid gap-2">
       <Label>{label}</Label>
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <Input value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }

@@ -29,24 +29,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isPasswordValid, passwordRequirements } from "@/lib/password";
-import type { ManagedUser, Role, UserForm } from "@/types";
+import { UserPermissionOverrides } from "@/components/user-permission-overrides";
+import type { ManagedUser, Permission, Role, UserForm } from "@/types";
+
+const superAdminUserId = "00000000-0000-4000-8000-000000000002";
 
 type UsersModuleProps = {
   users: ManagedUser[];
   roles: Role[];
+  permissionsByGroup: Record<string, Permission[]>;
   userForm: UserForm;
   isLoading: boolean;
   onUserFormChange: (form: UserForm) => void;
   onCreateUser: (event: FormEvent<HTMLFormElement>) => void;
   onUpdateUser: (
     userId: string,
-    payload: Pick<ManagedUser, "fullName" | "email" | "roleId" | "status">,
+    payload: Pick<
+      ManagedUser,
+      "fullName" | "email" | "roleId" | "status" | "permissionOverrides"
+    >,
   ) => void;
 };
 
 export function UsersModule({
   users,
   roles,
+  permissionsByGroup,
   userForm,
   isLoading,
   onUserFormChange,
@@ -115,7 +123,11 @@ export function UsersModule({
                 <Select
                   value={userForm.roleId}
                   onValueChange={(roleId) =>
-                    onUserFormChange({ ...userForm, roleId })
+                    onUserFormChange({
+                      ...userForm,
+                      roleId,
+                      permissionOverrides: [],
+                    })
                   }
                 >
                   <SelectTrigger id="new-role" className="w-full">
@@ -168,6 +180,15 @@ export function UsersModule({
                 })}
               </div>
             </div>
+            <UserPermissionOverrides
+              idPrefix="new-user-permission"
+              permissionsByGroup={permissionsByGroup}
+              role={roles.find((role) => role.id === userForm.roleId)}
+              overrides={userForm.permissionOverrides}
+              onChange={(permissionOverrides) =>
+                onUserFormChange({ ...userForm, permissionOverrides })
+              }
+            />
             <Button type="submit" disabled={isLoading || !userCanBeCreated}>
               <UserPlus />
               Kullanıcı ekle
@@ -205,6 +226,11 @@ export function UsersModule({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline">{user.roleName}</Badge>
+                  {user.permissionOverrides.length > 0 && (
+                    <Badge variant="secondary">
+                      {user.permissionOverrides.length} özel izin
+                    </Badge>
+                  )}
                   <Badge
                     variant={user.status === "active" ? "secondary" : "outline"}
                   >
@@ -230,7 +256,7 @@ export function UsersModule({
         open={Boolean(editingUser)}
         onOpenChange={(open) => !open && setEditingUser(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Kullanıcıyı düzenle</DialogTitle>
           </DialogHeader>
@@ -244,6 +270,7 @@ export function UsersModule({
                   email: editingUser.email,
                   roleId: editingUser.roleId,
                   status: editingUser.status,
+                  permissionOverrides: editingUser.permissionOverrides,
                 });
                 setEditingUser(null);
               }}
@@ -284,7 +311,9 @@ export function UsersModule({
                     value={editingUser.roleId}
                     onValueChange={(roleId) =>
                       setEditingUser((current) =>
-                        current ? { ...current, roleId } : current,
+                        current
+                          ? { ...current, roleId, permissionOverrides: [] }
+                          : current,
                       )
                     }
                   >
@@ -326,6 +355,18 @@ export function UsersModule({
                   </Select>
                 </div>
               </div>
+              <UserPermissionOverrides
+                idPrefix={`edit-user-permission-${editingUser.id}`}
+                permissionsByGroup={permissionsByGroup}
+                role={roles.find((role) => role.id === editingUser.roleId)}
+                overrides={editingUser.permissionOverrides}
+                disabled={editingUser.id === superAdminUserId}
+                onChange={(permissionOverrides) =>
+                  setEditingUser((current) =>
+                    current ? { ...current, permissionOverrides } : current,
+                  )
+                }
+              />
               <DialogFooter>
                 <Button
                   type="button"

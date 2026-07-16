@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SUPER_ADMIN_USER_ID } from "../../../src/database/system-identities.js";
 import type { UserRepository } from "../../../src/modules/users/repository.js";
 import { UserService, type UserServiceDependencies } from "../../../src/modules/users/service.js";
 
@@ -10,14 +11,16 @@ const createInput = {
   email: "omer@example.test",
   password: "ValidPass1!",
   roleId: "role-1",
+  permissionOverrides: [{ permissionId: "logs.view", effect: "deny" as const }],
 };
 
 function createRepositoryFake() {
   return {
     listActive: vi.fn().mockResolvedValue([]),
     listAll: vi.fn().mockResolvedValue([]),
+    permissionIdsExist: vi.fn().mockResolvedValue(true),
     create: vi.fn().mockResolvedValue(undefined),
-    update: vi.fn().mockResolvedValue(1),
+    update: vi.fn().mockResolvedValue({ affectedRows: 1, roleChanged: false }),
   } as unknown as UserRepository;
 }
 
@@ -46,21 +49,27 @@ describe("user service", () => {
       role_name: "Yönetici",
       created_at: "2026-07-13 10:00:00",
       last_login_at: null,
+      permission_overrides: [],
+      permissions: ["logs.view"],
     };
     vi.mocked(repository.listActive).mockResolvedValue([row] as never);
     vi.mocked(repository.listAll).mockResolvedValue([row] as never);
     const service = new UserService(dependencies);
 
     await expect(service.listActive()).resolves.toStrictEqual([
-      expect.objectContaining({ id: "user-1", fullName: "Ömer Test" }),
+      expect.objectContaining({ id: "user-1", permissions: ["logs.view"] }),
     ]);
     await expect(service.listAll()).resolves.toStrictEqual([
       expect.objectContaining({ id: "user-1", roleName: "Yönetici" }),
     ]);
   });
 
-  it("hashes and inserts before writing the create audit", async () => {
+  it("validates, hashes and inserts before writing create and override audits", async () => {
     const events: string[] = [];
+    vi.mocked(repository.permissionIdsExist).mockImplementation(async () => {
+      events.push("validate");
+      return true;
+    });
     vi.mocked(dependencies.hashPassword).mockImplementation(async () => {
       events.push("hash");
       return "password-hash";
@@ -74,57 +83,74 @@ describe("user service", () => {
 
     await expect(new UserService(dependencies).create(request, createInput)).resolves.toBe("user-1");
 
-    expect(events).toStrictEqual(["hash", "insert", "audit"]);
+    expect(events).toStrictEqual(["validate", "hash", "insert", "audit", "audit"]);
     expect(repository.create).toHaveBeenCalledWith("user-1", createInput, "password-hash");
-    expect(dependencies.writeAuditLog).toHaveBeenCalledWith({
+    expect(dependencies.writeAuditLog).toHaveBeenLastCalledWith({
       req: request,
-      action: "user.create",
+      action: "user.permission_overrides.update",
       entityType: "user",
       entityId: "user-1",
-      metadata: { username: "omer", email: "omer@example.test", roleId: "role-1" },
+      metadata: {
+        roleId: "role-1",
+        grantedPermissions: [],
+        deniedPermissions: ["logs.view"],
+      },
     });
   });
 
-  it("propagates audit failure after the user insert", async () => {
-    vi.mocked(dependencies.writeAuditLog).mockRejectedValue(new Error("audit failed"));
+  it("rejects unknown permission ids before hashing or writing", async () => {
+    vi.mocked(repository.permissionIdsExist).mockResolvedValue(false);
 
-    await expect(new UserService(dependencies).create(request, createInput)).rejects.toThrow(
-      "audit failed",
-    );
-    expect(repository.create).toHaveBeenCalledOnce();
+    await expect(new UserService(dependencies).create(request, createInput)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(dependencies.hashPassword).not.toHaveBeenCalled();
+    expect(repository.create).not.toHaveBeenCalled();
   });
 
   it("does not audit an update when no user row is affected", async () => {
-    vi.mocked(repository.update).mockResolvedValue(0);
+    vi.mocked(repository.update).mockResolvedValue({ affectedRows: 0, roleChanged: false });
 
-    await expect(
-      new UserService(dependencies).update(request, {
-        userId: "missing",
-        fullName: "Ömer Test",
-        email: "omer@example.test",
-        roleId: "role-1",
-        status: "active",
-      }),
-    ).resolves.toBe(false);
+    await expect(new UserService(dependencies).update(request, {
+      userId: "missing",
+      fullName: "Ömer Test",
+      email: "omer@example.test",
+      roleId: "role-1",
+      status: "active",
+    })).resolves.toBe(false);
     expect(dependencies.writeAuditLog).not.toHaveBeenCalled();
   });
 
-  it("audits an affected update and returns true", async () => {
+  it("audits replacement overrides after an affected update", async () => {
     const input = {
       userId: "user-1",
       fullName: "Ömer Test",
       email: "omer@example.test",
       roleId: "role-1",
-      status: "passive" as const,
+      status: "active" as const,
+      permissionOverrides: [{ permissionId: "reports.view", effect: "allow" as const }],
     };
 
     await expect(new UserService(dependencies).update(request, input)).resolves.toBe(true);
-    expect(dependencies.writeAuditLog).toHaveBeenCalledWith({
-      req: request,
-      action: "user.update",
-      entityType: "user",
-      entityId: "user-1",
-      metadata: { email: "omer@example.test", roleId: "role-1", status: "passive" },
-    });
+    expect(dependencies.writeAuditLog).toHaveBeenLastCalledWith(expect.objectContaining({
+      action: "user.permission_overrides.update",
+      metadata: {
+        roleId: "role-1",
+        grantedPermissions: ["reports.view"],
+        deniedPermissions: [],
+      },
+    }));
+  });
+
+  it("protects the seeded super admin from non-empty overrides", async () => {
+    await expect(new UserService(dependencies).update(request, {
+      userId: SUPER_ADMIN_USER_ID,
+      fullName: "Süper Admin",
+      email: "admin@example.test",
+      roleId: "role-1",
+      status: "active",
+      permissionOverrides: [{ permissionId: "logs.view", effect: "deny" }],
+    })).rejects.toMatchObject({ status: 400 });
+    expect(repository.update).not.toHaveBeenCalled();
   });
 });

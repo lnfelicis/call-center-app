@@ -95,9 +95,33 @@ describe("user controller", () => {
       email: "omer@example.test",
       password: "123",
       roleId: "7",
+      permissionOverrides: [],
     });
     expect(response.status).toHaveBeenCalledWith(201);
     expect(response.json).toHaveBeenCalledWith({ id: "user-3" });
+  });
+
+  it("rejects duplicate permission overrides", async () => {
+    const response = createResponse();
+    await new UserController({ service, getPasswordValidationErrors }).create(
+      {
+        body: {
+          username: "omer",
+          fullName: "Ömer",
+          email: "omer@example.test",
+          password: "ValidPass1!",
+          roleId: "role-1",
+          permissionOverrides: [
+            { permissionId: "logs.view", effect: "deny" },
+            { permissionId: "logs.view", effect: "allow" },
+          ],
+        },
+      } as Request,
+      response,
+    );
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(service.create).not.toHaveBeenCalled();
   });
 
   it("validates required update fields", async () => {

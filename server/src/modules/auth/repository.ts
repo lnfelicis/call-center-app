@@ -73,10 +73,10 @@ export class AuthRepository {
         users.email,
         users.role_id,
         roles.name AS role_name,
-        role_permissions.permission_id
+        effective_user_permissions.permission_id
       FROM users
       INNER JOIN roles ON roles.id = users.role_id
-      LEFT JOIN role_permissions ON role_permissions.role_id = roles.id
+      LEFT JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id
       WHERE users.id = ? AND users.status = 'active' AND roles.is_active = 1`,
       [userId],
     );

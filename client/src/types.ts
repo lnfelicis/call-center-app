@@ -15,6 +15,11 @@ export type Permission = {
   description: string | null
 }
 
+export type PermissionOverride = {
+  permissionId: string
+  effect: "allow" | "deny"
+}
+
 export type Role = {
   id: string
   name: string
@@ -35,6 +40,8 @@ export type ManagedUser = {
   roleName: string
   createdAt: string
   lastLoginAt: string | null
+  permissionOverrides: PermissionOverride[]
+  permissions: string[]
 }
 
 export type RoleForm = {
@@ -49,6 +56,7 @@ export type UserForm = {
   email: string
   password: string
   roleId: string
+  permissionOverrides: PermissionOverride[]
 }
 
 export type ModuleId =

@@ -269,6 +269,97 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
     );
   });
 
+  it("applies per-user allow and deny overrides to protected endpoints immediately", async () => {
+    await resetIntegrationState(database);
+    const adminToken = await authenticatedToken();
+    const adminAuthorization = `Bearer ${adminToken}`;
+    const password = "ValidPass1!";
+
+    const managerRole = await request(app)
+      .post("/roles")
+      .set("authorization", adminAuthorization)
+      .send({
+        name: "Integration Manager",
+        description: "Override integration role",
+        permissions: ["logs.view"],
+      });
+    expect(managerRole.status).toBe(201);
+
+    const limitedRole = await request(app)
+      .post("/roles")
+      .set("authorization", adminAuthorization)
+      .send({
+        name: "Integration Limited",
+        description: "Allow override integration role",
+        permissions: ["calls.view.own"],
+      });
+    expect(limitedRole.status).toBe(201);
+
+    const users = [
+      { username: "manager-a", fullName: "Manager A", roleId: managerRole.body.id },
+      { username: "manager-b", fullName: "Manager B", roleId: managerRole.body.id },
+      { username: "limited-c", fullName: "Limited C", roleId: limitedRole.body.id },
+    ];
+
+    const createdIds: string[] = [];
+    for (const user of users) {
+      const created = await request(app)
+        .post("/users")
+        .set("authorization", adminAuthorization)
+        .send({
+          ...user,
+          email: `${user.username}@example.test`,
+          password,
+          permissionOverrides: [],
+        });
+      expect(created.status).toBe(201);
+      createdIds.push(String(created.body.id));
+    }
+
+    const denyLogs = await request(app)
+      .patch(`/users/${createdIds[1]}`)
+      .set("authorization", adminAuthorization)
+      .send({
+        fullName: users[1]!.fullName,
+        email: `${users[1]!.username}@example.test`,
+        roleId: managerRole.body.id,
+        status: "active",
+        permissionOverrides: [{ permissionId: "logs.view", effect: "deny" }],
+      });
+    expect(denyLogs.status).toBe(200);
+
+    const allowLogs = await request(app)
+      .patch(`/users/${createdIds[2]}`)
+      .set("authorization", adminAuthorization)
+      .send({
+        fullName: users[2]!.fullName,
+        email: `${users[2]!.username}@example.test`,
+        roleId: limitedRole.body.id,
+        status: "active",
+        permissionOverrides: [{ permissionId: "logs.view", effect: "allow" }],
+      });
+    expect(allowLogs.status).toBe(200);
+
+    const statuses: Record<string, number> = {};
+    for (const user of users) {
+      const loginResponse = await request(app).post("/auth/login").send({
+        username: user.username,
+        password,
+      });
+      expect(loginResponse.status).toBe(200);
+      const logsResponse = await request(app)
+        .get("/logs")
+        .set("authorization", `Bearer ${String(loginResponse.body.token)}`);
+      statuses[user.username] = logsResponse.status;
+    }
+
+    expect(statuses).toStrictEqual({
+      "manager-a": 200,
+      "manager-b": 403,
+      "limited-c": 200,
+    });
+  });
+
   it("increments wrong-password attempts and returns 423 after the configured limit", async () => {
     await resetIntegrationState(database);
     await writeJsonSetting(database, "security_settings", {

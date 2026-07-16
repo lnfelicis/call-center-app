@@ -41,6 +41,33 @@ export const schemaStatements = [
     CONSTRAINT fk_users_role
       FOREIGN KEY (role_id) REFERENCES roles(id)
   )`,
+  `CREATE TABLE IF NOT EXISTS user_permission_overrides (
+    user_id CHAR(36) NOT NULL,
+    permission_id VARCHAR(80) NOT NULL,
+    effect ENUM('allow', 'deny') NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, permission_id),
+    CONSTRAINT fk_user_permission_overrides_user
+      FOREIGN KEY (user_id) REFERENCES users(id)
+      ON DELETE CASCADE,
+    CONSTRAINT fk_user_permission_overrides_permission
+      FOREIGN KEY (permission_id) REFERENCES permissions(id)
+      ON DELETE CASCADE
+  )`,
+  `CREATE OR REPLACE VIEW effective_user_permissions AS
+    SELECT users.id AS user_id, role_permissions.permission_id
+    FROM users
+    INNER JOIN role_permissions ON role_permissions.role_id = users.role_id
+    LEFT JOIN user_permission_overrides
+      ON user_permission_overrides.user_id = users.id
+      AND user_permission_overrides.permission_id = role_permissions.permission_id
+      AND user_permission_overrides.effect = 'deny'
+    WHERE user_permission_overrides.user_id IS NULL
+    UNION
+    SELECT user_id, permission_id
+    FROM user_permission_overrides
+    WHERE effect = 'allow'`,
   `CREATE TABLE IF NOT EXISTS call_records (
     id CHAR(36) PRIMARY KEY,
     record_number VARCHAR(32) NOT NULL UNIQUE,

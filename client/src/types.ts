@@ -144,6 +144,10 @@ export type CallForm = {
   followUpAt: string
 }
 
+export type CreateCallPayload = CallForm & {
+  assignedToUserId?: string | null
+}
+
 export type UserOption = {
   id: string
   fullName: string

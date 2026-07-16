@@ -81,6 +81,23 @@ export function createCallController(dependencies: CallControllerDependencies) {
     fallback: string,
   ) => normalizeStoredOptionValue(repository, type, value, fallback);
 
+  async function getAssignableUser(userId: string) {
+    const [rows] = await db.query<UserOptionRow[]>(
+      `SELECT DISTINCT users.id, users.full_name, users.username
+      FROM users
+      INNER JOIN roles ON roles.id = users.role_id
+      INNER JOIN role_permissions ON role_permissions.role_id = roles.id
+      WHERE users.id = ?
+        AND users.status = 'active'
+        AND roles.is_active = 1
+        AND role_permissions.permission_id IN ('calls.view.own', 'calls.view.all', 'calls.create')
+      LIMIT 1`,
+      [userId],
+    );
+
+    return rows[0] ?? null;
+  }
+
 async function ensureCanViewCall(req: AuthenticatedRequest, callId: string, res: Response) {
   const call = await getCallById(callId);
 
@@ -259,10 +276,14 @@ async function updateCallOption(req: AuthenticatedRequest, res: Response) {
 
 async function getAssignees(_req: AuthenticatedRequest, res: Response) {
     const [rows] = await db.query<UserOptionRow[]>(
-      `SELECT id, full_name, username
+      `SELECT DISTINCT users.id, users.full_name, users.username
       FROM users
-      WHERE status = 'active'
-      ORDER BY full_name ASC`,
+      INNER JOIN roles ON roles.id = users.role_id
+      INNER JOIN role_permissions ON role_permissions.role_id = roles.id
+      WHERE users.status = 'active'
+        AND roles.is_active = 1
+        AND role_permissions.permission_id IN ('calls.view.own', 'calls.view.all', 'calls.create')
+      ORDER BY users.full_name ASC`,
     );
 
     res.json({
@@ -306,6 +327,22 @@ async function createCall(req: AuthenticatedRequest, res: Response) {
   const priority = await normalizeOptionValue("priority", req.body.priority, "normal");
   const needsFollowUp = normalizeBoolean(req.body.needsFollowUp);
   const followUpAt = needsFollowUp ? normalizeRequiredString(req.body.followUpAt) : null;
+  const assignedToUserId = normalizeOptionalString(req.body.assignedToUserId);
+
+  if (assignedToUserId && !hasPermission(req, "calls.assign")) {
+    res.status(403).json({ message: "Çağrı ataması yapma yetkiniz yok." });
+    return;
+  }
+
+  const assignedToUser = assignedToUserId
+    ? await getAssignableUser(assignedToUserId)
+    : null;
+
+  if (assignedToUserId && !assignedToUser) {
+    res.status(400).json({ message: "Seçilen kullanıcıya çağrı atanamaz." });
+    return;
+  }
+
   const fields = await getFieldSettings();
   const requiredError = requiredFieldError(fields, {
     phoneNumber,
@@ -368,13 +405,14 @@ async function createCall(req: AuthenticatedRequest, res: Response) {
 
   const callId = idGenerator();
   const recordNumber = generateRecordNumber();
+  const initialStatus = assignedToUser ? "transferred" : "open";
 
   await db.query(
     `INSERT INTO call_records
       (id, record_number, phone_number, student_tc, student_name, interaction_type, category,
        sub_category, issue, initial_note, priority, status, needs_follow_up, follow_up_at,
        opened_by_user_id, assigned_to_user_id, ip_address, user_agent)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       callId,
       recordNumber,
@@ -387,10 +425,11 @@ async function createCall(req: AuthenticatedRequest, res: Response) {
       issue,
       initialNote,
       priority,
+      initialStatus,
       needsFollowUp ? 1 : 0,
       followUpAt,
       req.user?.id,
-      null,
+      assignedToUser?.id ?? null,
       getClientIp(req),
       req.header("user-agent") ?? null,
     ],
@@ -398,13 +437,28 @@ async function createCall(req: AuthenticatedRequest, res: Response) {
 
   await writeCallEvent(req, callId, "call.created", "Yeni çağrı kaydı oluşturuldu.", {
     recordNumber,
+    assignedToUserId: assignedToUser?.id ?? null,
+    assignedToName: assignedToUser?.full_name ?? null,
   });
+
+  if (assignedToUser) {
+    await writeCallEvent(req, callId, "call.assigned", "Çağrı kaydı personele atandı.", {
+      assignedToUserId: assignedToUser.id,
+      assignedToName: assignedToUser.full_name,
+    });
+  }
+
   await writeAuditLog({
     req,
     action: "call.create",
     entityType: "call",
     entityId: callId,
-    metadata: { recordNumber, warnings },
+    metadata: {
+      recordNumber,
+      warnings,
+      assignedToUserId: assignedToUser?.id ?? null,
+      assignedToName: assignedToUser?.full_name ?? null,
+    },
   });
 
   const notificationSettings = await readAppSetting("notification_settings");
@@ -734,21 +788,49 @@ async function assignCall(req: AuthenticatedRequest, res: Response) {
   }
 
   const assignedToUserId = normalizeOptionalString(req.body.assignedToUserId);
+  const assignedToUser = assignedToUserId
+    ? await getAssignableUser(assignedToUserId)
+    : null;
+
+  if (assignedToUserId && !assignedToUser) {
+    res.status(400).json({ message: "Seçilen kullanıcıya çağrı atanamaz." });
+    return;
+  }
+
   await db.query(
     `UPDATE call_records
-    SET assigned_to_user_id = ?, status = IF(status = 'open', 'transferred', status)
+    SET assigned_to_user_id = ?,
+      status = CASE
+        WHEN ? IS NOT NULL AND status = 'open' THEN 'transferred'
+        WHEN ? IS NULL AND status = 'transferred' THEN 'open'
+        ELSE status
+      END
     WHERE id = ?`,
-    [assignedToUserId, call.id],
+    [assignedToUserId, assignedToUserId, assignedToUserId, call.id],
   );
-  await writeCallEvent(req, call.id, "call.assigned", "Çağrı kaydı ataması güncellendi.", {
-    assignedToUserId,
-  });
+  await writeCallEvent(
+    req,
+    call.id,
+    "call.assigned",
+    assignedToUser ? "Çağrı kaydı ataması güncellendi." : "Çağrı kaydı ataması kaldırıldı.",
+    {
+      previousAssignedToUserId: call.assigned_to_user_id,
+      previousAssignedToName: call.assigned_to_name,
+      assignedToUserId: assignedToUser?.id ?? null,
+      assignedToName: assignedToUser?.full_name ?? null,
+    },
+  );
   await writeAuditLog({
     req,
     action: "call.assign",
     entityType: "call",
     entityId: call.id,
-    metadata: { assignedToUserId },
+    metadata: {
+      previousAssignedToUserId: call.assigned_to_user_id,
+      previousAssignedToName: call.assigned_to_name,
+      assignedToUserId: assignedToUser?.id ?? null,
+      assignedToName: assignedToUser?.full_name ?? null,
+    },
   });
 
   res.json({ ok: true });

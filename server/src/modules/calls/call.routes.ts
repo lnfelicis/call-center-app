@@ -37,7 +37,7 @@ export function createCallRoutes(dependencies: CallRoutesDependencies) {
   );
   router.get(
     "/calls/assignees",
-    dependencies.requireAnyPermission(["calls.assign", "calls.create"]),
+    dependencies.requirePermission("calls.assign"),
     controller.getAssignees,
   );
   router.get(

@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -54,7 +55,9 @@ import type {
   CallPriority,
   CallRecord,
   CallStatus,
+  CreateCallPayload,
   RequestFn,
+  UserOption,
 } from "@/types";
 
 type CallsModuleProps = {
@@ -83,6 +86,8 @@ const emptyCallForm: CallForm = {
   needsFollowUp: false,
   followUpAt: "",
 };
+
+const unassignedValue = "__unassigned__";
 
 function sanitizePhoneInput(value: string) {
   return value.replace(/[^0-9+ ()-]/g, "").slice(0, 20);
@@ -124,6 +129,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   const toast = useToast();
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [callOptions, setCallOptions] = useState<CallFormOption[]>([]);
+  const [assignees, setAssignees] = useState<UserOption[]>([]);
   const [fieldSettings, setFieldSettings] = useState<CallFormFieldSetting[]>(
     [],
   );
@@ -131,6 +137,8 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   const [selectedDetail, setSelectedDetail] = useState<CallDetail | null>(null);
   const [callForm, setCallForm] = useState<CallForm>(emptyCallForm);
   const [editForm, setEditForm] = useState<CallForm>(emptyCallForm);
+  const [createAssigneeId, setCreateAssigneeId] = useState(unassignedValue);
+  const [detailAssigneeId, setDetailAssigneeId] = useState(unassignedValue);
   const [noteForm, setNoteForm] = useState({
     noteType: "personnel",
     content: "",
@@ -166,6 +174,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     selectedDetail?.call ?? calls.find((call) => call.id === selectedCallId);
   const canCreate = currentUser.permissions.includes("calls.create");
   const canEdit = currentUser.permissions.includes("calls.edit");
+  const canAssign = currentUser.permissions.includes("calls.assign");
   const canViewAll = currentUser.permissions.includes("calls.view.all");
   const canResolve = currentUser.permissions.includes("calls.resolve");
   const canReopen = currentUser.permissions.includes("calls.reopen");
@@ -176,11 +185,33 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
 
   const visibleCalls = useMemo(() => {
     if (activeScope === "own") {
-      return calls.filter((call) => call.openedByUserId === currentUser.id);
+      return calls.filter(
+        (call) =>
+          call.openedByUserId === currentUser.id ||
+          call.assignedToUserId === currentUser.id,
+      );
     }
 
     return calls;
   }, [activeScope, calls, currentUser.id]);
+
+  const detailAssigneeOptions = useMemo(() => {
+    if (
+      !selectedCall?.assignedToUserId ||
+      assignees.some((user) => user.id === selectedCall.assignedToUserId)
+    ) {
+      return assignees;
+    }
+
+    return [
+      {
+        id: selectedCall.assignedToUserId,
+        fullName: selectedCall.assignedToName ?? "Mevcut personel",
+        username: "",
+      },
+      ...assignees,
+    ];
+  }, [assignees, selectedCall]);
 
   const listSummary = useMemo(() => {
     return {
@@ -399,6 +430,16 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
       cell: (call) => <span className="truncate">{call.openedByName}</span>,
     },
     {
+      id: "assignedTo",
+      header: "Atanan",
+      size: 180,
+      minSize: 140,
+      accessor: (call) => call.assignedToName ?? "Atanmamış",
+      cell: (call) => (
+        <span className="truncate">{call.assignedToName ?? "-"}</span>
+      ),
+    },
+    {
       id: "createdAt",
       header: "Oluşturulma",
       size: 180,
@@ -513,7 +554,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     setMessage("");
 
     try {
-      const [callData, optionData] = await Promise.all([
+      const [callData, optionData, assigneeData] = await Promise.all([
         request<{ calls: CallRecord[] }>("/calls"),
         canCreate || canResolve || canEdit
           ? request<{
@@ -521,10 +562,14 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
               fields: CallFormFieldSetting[];
             }>("/call-options")
           : Promise.resolve({ options: [], fields: [] }),
+        canAssign
+          ? request<{ users: UserOption[] }>("/calls/assignees")
+          : Promise.resolve({ users: [] as UserOption[] }),
       ]);
 
       setCalls(callData.calls);
       setCallOptions(optionData.options);
+      setAssignees(assigneeData.users);
       setFieldSettings("fields" in optionData ? optionData.fields : []);
       setSelectedCallId((current) => current || callData.calls[0]?.id || "");
       const activeInteractionTypes = optionData.options.filter(
@@ -680,6 +725,9 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     }
 
     setEditForm(callToForm(selectedCall));
+    setDetailAssigneeId(
+      selectedCall.assignedToUserId ?? unassignedValue,
+    );
     setEditError("");
     setEditFieldErrors({});
   }, [isDetailOpen, selectedCall]);
@@ -714,6 +762,7 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
       setCreateError("");
       setCreateFieldErrors({});
     } else {
+      setCreateAssigneeId(unassignedValue);
       setCallMatches({ matches: [], matchedBy: null });
       setIsLoadingMatches(false);
     }
@@ -790,14 +839,22 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
     setCreateFieldErrors({});
 
     try {
+      const payload: CreateCallPayload = canAssign
+        ? {
+            ...callForm,
+            assignedToUserId:
+              createAssigneeId === unassignedValue ? null : createAssigneeId,
+          }
+        : callForm;
       const data = await request<{ call: CallRecord; warnings: string[] }>(
         "/calls",
         {
           method: "POST",
-          body: JSON.stringify(callForm),
+          body: JSON.stringify(payload),
         },
       );
       setCallForm(emptyCallForm);
+      setCreateAssigneeId(unassignedValue);
       setIsCreateOpen(false);
       setSelectedCallId(data.call.id);
       setMessage(
@@ -813,6 +870,45 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
         setCreateError,
         setCreateFieldErrors,
         "Çağrı kaydı oluşturulamadı.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function updateAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedCall || !canAssign) {
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage("");
+
+    try {
+      await request(`/calls/${selectedCall.id}/assign`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          assignedToUserId:
+            detailAssigneeId === unassignedValue ? null : detailAssigneeId,
+        }),
+      });
+      setMessage(
+        detailAssigneeId === unassignedValue
+          ? "Çağrı ataması kaldırıldı."
+          : "Çağrı ataması güncellendi.",
+      );
+      toast.success(
+        detailAssigneeId === unassignedValue
+          ? "Atama kaldırıldı."
+          : "Atama güncellendi.",
+      );
+      await loadCalls();
+      await loadCallDetail(selectedCall.id);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Çağrı ataması güncellenemedi.",
       );
     } finally {
       setIsLoading(false);
@@ -1129,24 +1225,69 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                   <TabsTrigger value="history">Geçmiş</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="summary">
+                <TabsContent value="summary" className="grid gap-4">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <Info label="Açan" value={selectedCall.openedByName} />
+                    <Info
+                      label="Atanan"
+                      value={selectedCall.assignedToName ?? "Atanmamış"}
+                    />
+                    <Info
+                      label="Oluşturulma"
+                      value={formatDate(selectedCall.createdAt)}
+                    />
+                    <Info
+                      label="Durum"
+                      value={optionLabel("status", selectedCall.status)}
+                    />
+                  </div>
+                  {canAssign && !selectedCall.isLocked && (
+                    <form
+                      className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(240px,1fr)_max-content] sm:items-end"
+                      onSubmit={updateAssignment}
+                    >
+                      <div className="grid gap-2">
+                        <Label>Atanan personel</Label>
+                        <Select
+                          value={detailAssigneeId}
+                          onValueChange={setDetailAssigneeId}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Personel seçin" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value={unassignedValue}>
+                                Atanmamış
+                              </SelectItem>
+                              {detailAssigneeOptions.map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                  {user.fullName}
+                                  {user.username ? ` (${user.username})` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={
+                          isLoading ||
+                          detailAssigneeId ===
+                            (selectedCall.assignedToUserId ?? unassignedValue)
+                        }
+                      >
+                        Atamayı güncelle
+                      </Button>
+                    </form>
+                  )}
                   <form className="grid gap-4" onSubmit={updateCall} noValidate>
                     {editError && (
                       <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                         {editError}
                       </p>
                     )}
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      <Info label="Açan" value={selectedCall.openedByName} />
-                      <Info
-                        label="Oluşturulma"
-                        value={formatDate(selectedCall.createdAt)}
-                      />
-                      <Info
-                        label="Durum"
-                        value={optionLabel("status", selectedCall.status)}
-                      />
-                    </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {fieldIsVisible("phoneNumber") && (
                         <Field
@@ -1832,6 +1973,29 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
                 </div>
               )}
             </div>
+            {canAssign && (
+              <div className="grid gap-2">
+                <Label>Atanan personel</Label>
+                <Select
+                  value={createAssigneeId}
+                  onValueChange={setCreateAssigneeId}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Personel seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={unassignedValue}>Atanmamış</SelectItem>
+                      {assignees.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.fullName} ({user.username})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {fieldIsVisible("issue") && (
               <Field
                 label={fieldDisplayLabel("issue")}

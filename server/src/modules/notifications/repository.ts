@@ -23,6 +23,7 @@ export class NotificationRepository {
       INNER JOIN roles ON roles.id = users.role_id
       INNER JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id
       WHERE users.status = 'active'
+        AND users.archived_at IS NULL
         AND roles.is_active = 1
         AND effective_user_permissions.permission_id IN (${placeholders})`,
       permissionIds,

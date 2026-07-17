@@ -1,10 +1,10 @@
 export type ApiEndpoint = {
-  method: "get" | "post" | "patch";
+  method: "get" | "post" | "patch" | "delete";
   path: string;
 };
 
 export type ApiRouteContract = {
-  method: "GET" | "POST" | "PATCH";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   path: string;
 };
 
@@ -50,6 +50,8 @@ export const apiRouteManifest: ApiRouteContract[] = [
   { method: "GET", path: "/users" },
   { method: "POST", path: "/users" },
   { method: "PATCH", path: "/users/:id" },
+  { method: "DELETE", path: "/users/:id" },
+  { method: "POST", path: "/users/:id/restore" },
   { method: "GET", path: "/logs" },
   { method: "GET", path: "/notifications" },
   { method: "PATCH", path: "/notifications/:id/read" },
@@ -99,4 +101,6 @@ export const protectedApiEndpoints: ApiEndpoint[] = [
   { method: "get", path: "/users" },
   { method: "post", path: "/users" },
   { method: "patch", path: "/users/test-id" },
+  { method: "delete", path: "/users/test-id" },
+  { method: "post", path: "/users/test-id/restore" },
 ];

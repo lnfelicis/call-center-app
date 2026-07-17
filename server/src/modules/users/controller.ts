@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { parsePermissionOverrides } from "./policy.js";
 import type { UserService } from "./service.js";
+import type { UserListScope } from "./types.js";
 
 export type UserControllerDependencies = {
   service: UserService;
@@ -14,8 +15,12 @@ export class UserController {
     res.json({ users: await this.dependencies.service.listActive() });
   };
 
-  list = async (_req: Request, res: Response) => {
-    res.json({ users: await this.dependencies.service.listAll() });
+  list = async (req: Request, res: Response) => {
+    const requestedScope = String(req.query?.scope ?? "current");
+    const scope: UserListScope = requestedScope === "all" || requestedScope === "archived"
+      ? requestedScope
+      : "current";
+    res.json({ users: await this.dependencies.service.listAll(scope) });
   };
 
   create = async (req: Request, res: Response) => {
@@ -96,6 +101,24 @@ export class UserController {
       return;
     }
 
+    res.json({ ok: true });
+  };
+
+  archive = async (req: Request, res: Response) => {
+    const archived = await this.dependencies.service.archive(req, String(req.params.id ?? ""));
+    if (!archived) {
+      res.status(404).json({ message: "Kullanıcı bulunamadı veya zaten silinmiş." });
+      return;
+    }
+    res.json({ ok: true });
+  };
+
+  restore = async (req: Request, res: Response) => {
+    const restored = await this.dependencies.service.restore(req, String(req.params.id ?? ""));
+    if (!restored) {
+      res.status(404).json({ message: "Silinmiş kullanıcı bulunamadı." });
+      return;
+    }
     res.json({ ok: true });
   };
 }

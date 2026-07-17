@@ -21,6 +21,8 @@ function createRepositoryFake() {
     permissionIdsExist: vi.fn().mockResolvedValue(true),
     create: vi.fn().mockResolvedValue(undefined),
     update: vi.fn().mockResolvedValue({ affectedRows: 1, roleChanged: false }),
+    archive: vi.fn().mockResolvedValue(1),
+    restore: vi.fn().mockResolvedValue(1),
   } as unknown as UserRepository;
 }
 
@@ -49,6 +51,7 @@ describe("user service", () => {
       role_name: "Yönetici",
       created_at: "2026-07-13 10:00:00",
       last_login_at: null,
+      archived_at: null,
       permission_overrides: [],
       permissions: ["logs.view"],
     };
@@ -152,5 +155,37 @@ describe("user service", () => {
       permissionOverrides: [{ permissionId: "logs.view", effect: "deny" }],
     })).rejects.toMatchObject({ status: 400 });
     expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it("archives a user and writes an audit entry", async () => {
+    const archiveRequest = { user: { id: "actor-1" } } as Request;
+
+    await expect(new UserService(dependencies).archive(archiveRequest, "user-1")).resolves.toBe(true);
+    expect(repository.archive).toHaveBeenCalledWith("user-1");
+    expect(dependencies.writeAuditLog).toHaveBeenCalledWith({
+      req: archiveRequest,
+      action: "user.archive",
+      entityType: "user",
+      entityId: "user-1",
+      metadata: {},
+    });
+  });
+
+  it("protects the current user and seeded super admin from archiving", async () => {
+    const service = new UserService(dependencies);
+    const archiveRequest = { user: { id: "user-1" } } as Request;
+
+    await expect(service.archive(archiveRequest, "user-1")).rejects.toMatchObject({ status: 400 });
+    await expect(service.archive(archiveRequest, SUPER_ADMIN_USER_ID)).rejects.toMatchObject({ status: 400 });
+    expect(repository.archive).not.toHaveBeenCalled();
+  });
+
+  it("restores a user and writes an audit entry", async () => {
+    await expect(new UserService(dependencies).restore(request, "user-1")).resolves.toBe(true);
+    expect(repository.restore).toHaveBeenCalledWith("user-1");
+    expect(dependencies.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      action: "user.restore",
+      entityId: "user-1",
+    }));
   });
 });

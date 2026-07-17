@@ -38,7 +38,7 @@ describe("NotificationRepository", () => {
     ).resolves.toStrictEqual(["user-1", "user-2"]);
 
     expect(compactSql(query.mock.calls[0]?.[0])).toBe(
-      "SELECT DISTINCT users.id FROM users INNER JOIN roles ON roles.id = users.role_id INNER JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id WHERE users.status = 'active' AND roles.is_active = 1 AND effective_user_permissions.permission_id IN (?, ?)",
+      "SELECT DISTINCT users.id FROM users INNER JOIN roles ON roles.id = users.role_id INNER JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id WHERE users.status = 'active' AND users.archived_at IS NULL AND roles.is_active = 1 AND effective_user_permissions.permission_id IN (?, ?)",
     );
     expect(query.mock.calls[0]?.[1]).toStrictEqual([
       "calls.view.all",

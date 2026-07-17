@@ -5,6 +5,7 @@ import type {
   PermissionOverride,
   UpdateUserInput,
   UserRow,
+  UserListScope,
 } from "./types.js";
 
 export type UserDatabase = Pick<Pool, "query" | "getConnection">;
@@ -19,6 +20,7 @@ const userSelect = `SELECT
   roles.name AS role_name,
   users.created_at,
   users.last_login_at,
+  users.archived_at,
   COALESCE((
     SELECT JSON_ARRAYAGG(JSON_OBJECT(
       'permissionId', user_permission_overrides.permission_id,
@@ -57,15 +59,21 @@ export class UserRepository {
   async listActive() {
     const [rows] = await this.database.query<UserRow[]>(
       `${userSelect}
-      WHERE users.status = 'active'
+      WHERE users.status = 'active' AND users.archived_at IS NULL
       ORDER BY users.full_name ASC`,
     );
     return rows;
   }
 
-  async listAll() {
+  async listAll(scope: UserListScope = "current") {
+    const scopeClause = scope === "all"
+      ? ""
+      : scope === "archived"
+        ? "WHERE users.archived_at IS NOT NULL"
+        : "WHERE users.archived_at IS NULL";
     const [rows] = await this.database.query<UserRow[]>(
       `${userSelect}
+      ${scopeClause}
       ORDER BY users.created_at ASC`,
     );
     return rows;
@@ -110,7 +118,7 @@ export class UserRepository {
     try {
       await connection.beginTransaction();
       const [rows] = await connection.query<Array<RowDataPacket & { role_id: string }>>(
-        "SELECT role_id FROM users WHERE id = ? FOR UPDATE",
+        "SELECT role_id FROM users WHERE id = ? AND archived_at IS NULL FOR UPDATE",
         [input.userId],
       );
       const current = rows[0];
@@ -142,5 +150,25 @@ export class UserRepository {
     } finally {
       connection.release();
     }
+  }
+
+  async archive(userId: string) {
+    const [result] = await this.database.query<ResultSetHeader>(
+      `UPDATE users
+      SET archived_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND archived_at IS NULL`,
+      [userId],
+    );
+    return result.affectedRows;
+  }
+
+  async restore(userId: string) {
+    const [result] = await this.database.query<ResultSetHeader>(
+      `UPDATE users
+      SET archived_at = NULL
+      WHERE id = ? AND archived_at IS NOT NULL`,
+      [userId],
+    );
+    return result.affectedRows;
   }
 }

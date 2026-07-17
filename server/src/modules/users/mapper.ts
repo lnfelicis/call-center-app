@@ -28,6 +28,7 @@ export function mapUserRow(row: UserRow): UserDto {
     roleName: row.role_name,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
+    archivedAt: row.archived_at,
     permissionOverrides: parseJsonArray(row.permission_overrides),
     permissions: parseJsonArray(row.permissions),
   };

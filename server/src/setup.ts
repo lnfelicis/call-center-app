@@ -149,6 +149,16 @@ async function runSchema(database: Database) {
   );
 
   try {
+    await database.query("ALTER TABLE users ADD COLUMN archived_at TIMESTAMP NULL AFTER last_login_at");
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+
+    if (code !== "ER_DUP_FIELDNAME") {
+      throw error;
+    }
+  }
+
+  try {
     await database.query("ALTER TABLE call_form_options ADD COLUMN value VARCHAR(80) NULL AFTER label");
   } catch (error) {
     const code = (error as { code?: string }).code;

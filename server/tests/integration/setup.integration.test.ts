@@ -45,7 +45,7 @@ async function authenticatedToken() {
   return String(response.body.token);
 }
 
-function sendWithoutAuthentication(method: "get" | "post" | "patch", path: string) {
+function sendWithoutAuthentication(method: "get" | "post" | "patch" | "delete", path: string) {
   if (method === "get") {
     return request(app).get(path);
   }
@@ -174,7 +174,7 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
     expect(publicLogin.text).toBe(
       '{"message":"Kullanıcı adı ve şifre zorunludur."}',
     );
-    expect(protectedApiEndpoints).toHaveLength(43);
+    expect(protectedApiEndpoints).toHaveLength(45);
 
     for (const endpoint of protectedApiEndpoints) {
       const response = await sendWithoutAuthentication(endpoint.method, endpoint.path);

@@ -21,7 +21,7 @@ describe("auth repository", () => {
       failedLoginAttempts: 2,
     });
     expect(database.query).toHaveBeenCalledWith(
-      "SELECT id, password_hash, status, failed_login_attempts FROM users WHERE username = ? OR email = ? LIMIT 1",
+      expect.stringContaining("AND archived_at IS NULL"),
       ["omer", "omer"],
     );
   });

@@ -28,6 +28,8 @@ export function createUserRoutes({
   router.get("/users", requirePermission("users.manage"), controller.list);
   router.post("/users", requirePermission("users.manage"), controller.create);
   router.patch("/users/:id", requirePermission("users.manage"), controller.update);
+  router.delete("/users/:id", requirePermission("users.manage"), controller.archive);
+  router.post("/users/:id/restore", requirePermission("users.manage"), controller.restore);
 
   return router;
 }

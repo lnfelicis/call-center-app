@@ -40,6 +40,7 @@ export type ManagedUser = {
   roleName: string
   createdAt: string
   lastLoginAt: string | null
+  archivedAt: string | null
   permissionOverrides: PermissionOverride[]
   permissions: string[]
 }

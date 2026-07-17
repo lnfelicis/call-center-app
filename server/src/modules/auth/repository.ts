@@ -33,7 +33,10 @@ export class AuthRepository {
 
   async findLoginUser(username: string): Promise<LoginUser | null> {
     const [rows] = await this.database.query<LoginUserRow[]>(
-      "SELECT id, password_hash, status, failed_login_attempts FROM users WHERE username = ? OR email = ? LIMIT 1",
+      `SELECT id, password_hash, status, failed_login_attempts
+      FROM users
+      WHERE (username = ? OR email = ?) AND archived_at IS NULL
+      LIMIT 1`,
       [username, username],
     );
     const row = rows[0];
@@ -77,7 +80,10 @@ export class AuthRepository {
       FROM users
       INNER JOIN roles ON roles.id = users.role_id
       LEFT JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id
-      WHERE users.id = ? AND users.status = 'active' AND roles.is_active = 1`,
+      WHERE users.id = ?
+        AND users.status = 'active'
+        AND users.archived_at IS NULL
+        AND roles.is_active = 1`,
       [userId],
     );
 

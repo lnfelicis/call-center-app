@@ -89,6 +89,7 @@ export function createCallController(dependencies: CallControllerDependencies) {
       INNER JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id
       WHERE users.id = ?
         AND users.status = 'active'
+        AND users.archived_at IS NULL
         AND roles.is_active = 1
         AND effective_user_permissions.permission_id IN ('calls.view.own', 'calls.view.all', 'calls.create')
       LIMIT 1`,
@@ -281,6 +282,7 @@ async function getAssignees(_req: AuthenticatedRequest, res: Response) {
       INNER JOIN roles ON roles.id = users.role_id
       INNER JOIN effective_user_permissions ON effective_user_permissions.user_id = users.id
       WHERE users.status = 'active'
+        AND users.archived_at IS NULL
         AND roles.is_active = 1
         AND effective_user_permissions.permission_id IN ('calls.view.own', 'calls.view.all', 'calls.create')
       ORDER BY users.full_name ASC`,

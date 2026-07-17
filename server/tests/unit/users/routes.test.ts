@@ -13,6 +13,8 @@ describe("user routes", () => {
       list: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      archive: vi.fn(),
+      restore: vi.fn(),
     } as unknown as UserController;
 
     const router = createUserRoutes({
@@ -28,6 +30,6 @@ describe("user routes", () => {
       "reports.export",
       "users.manage",
     ]);
-    expect(requirePermission).toHaveBeenCalledTimes(3);
+    expect(requirePermission).toHaveBeenCalledTimes(5);
   });
 });

@@ -15,6 +15,8 @@ function createService() {
     listAll: vi.fn().mockResolvedValue([{ id: "user-2" }]),
     create: vi.fn().mockResolvedValue("user-3"),
     update: vi.fn().mockResolvedValue(true),
+    archive: vi.fn().mockResolvedValue(true),
+    restore: vi.fn().mockResolvedValue(true),
   } as unknown as UserService;
 }
 
@@ -33,10 +35,26 @@ describe("user controller", () => {
     const listResponse = createResponse();
 
     await controller.options({} as Request, optionsResponse);
-    await controller.list({} as Request, listResponse);
+    await controller.list({ query: { scope: "all" } } as unknown as Request, listResponse);
 
     expect(optionsResponse.json).toHaveBeenCalledWith({ users: [{ id: "user-1" }] });
     expect(listResponse.json).toHaveBeenCalledWith({ users: [{ id: "user-2" }] });
+    expect(service.listAll).toHaveBeenCalledWith("all");
+  });
+
+  it("archives and restores users in the existing response envelope", async () => {
+    const controller = new UserController({ service, getPasswordValidationErrors });
+    const request = { params: { id: "user-1" } } as unknown as Request;
+    const archiveResponse = createResponse();
+    const restoreResponse = createResponse();
+
+    await controller.archive(request, archiveResponse);
+    await controller.restore(request, restoreResponse);
+
+    expect(service.archive).toHaveBeenCalledWith(request, "user-1");
+    expect(service.restore).toHaveBeenCalledWith(request, "user-1");
+    expect(archiveResponse.json).toHaveBeenCalledWith({ ok: true });
+    expect(restoreResponse.json).toHaveBeenCalledWith({ ok: true });
   });
 
   it("validates required create fields before password rules", async () => {

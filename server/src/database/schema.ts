@@ -36,6 +36,7 @@ export const schemaStatements = [
     status ENUM('active', 'passive') NOT NULL DEFAULT 'active',
     failed_login_attempts INT NOT NULL DEFAULT 0,
     last_login_at TIMESTAMP NULL,
+    archived_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_users_role

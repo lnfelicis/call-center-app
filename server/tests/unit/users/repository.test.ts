@@ -33,7 +33,7 @@ describe("user repository", () => {
 
     await expect(new UserRepository(database).listActive()).resolves.toBe(rows);
     expect(database.query).toHaveBeenCalledWith(expect.stringContaining(
-      "WHERE users.status = 'active'\n      ORDER BY users.full_name ASC",
+      "WHERE users.status = 'active' AND users.archived_at IS NULL\n      ORDER BY users.full_name ASC",
     ));
     expect(database.query).toHaveBeenCalledWith(expect.stringContaining(
       "FROM effective_user_permissions",
@@ -44,10 +44,32 @@ describe("user repository", () => {
     const rows = [{ id: "user-1" }];
     const database = databaseWithResult(rows);
 
-    await expect(new UserRepository(database).listAll()).resolves.toBe(rows);
+    await expect(new UserRepository(database).listAll("all")).resolves.toBe(rows);
     expect(database.query).toHaveBeenCalledWith(expect.stringContaining(
       "ORDER BY users.created_at ASC",
     ));
+  });
+
+  it("archives and restores only users in the expected state", async () => {
+    const database = {
+      query: vi.fn()
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []]),
+    } as unknown as UserDatabase;
+    const repository = new UserRepository(database);
+
+    await expect(repository.archive("user-1")).resolves.toBe(1);
+    await expect(repository.restore("user-1")).resolves.toBe(1);
+    expect(database.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("archived_at IS NULL"),
+      ["user-1"],
+    );
+    expect(database.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("archived_at IS NOT NULL"),
+      ["user-1"],
+    );
   });
 
   it("creates the user and overrides in one transaction", async () => {

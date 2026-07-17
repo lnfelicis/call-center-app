@@ -24,7 +24,9 @@ export class AdminRepository {
       [recentLogs],
     ] = await Promise.all([
       this.database.query<CountRow[]>("SELECT COUNT(*) AS total FROM call_records"),
-      this.database.query<CountRow[]>("SELECT COUNT(*) AS total FROM users"),
+      this.database.query<CountRow[]>(
+        "SELECT COUNT(*) AS total FROM users WHERE archived_at IS NULL",
+      ),
       this.database.query<CountRow[]>("SELECT COUNT(*) AS total FROM roles WHERE is_active = 1"),
       this.database.query<CountRow[]>(
         "SELECT COUNT(*) AS total FROM call_records WHERE status NOT IN ('resolved', 'closed', 'archived', 'cancelled')",

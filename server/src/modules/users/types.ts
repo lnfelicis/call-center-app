@@ -2,6 +2,7 @@ import type { RowDataPacket } from "mysql2";
 
 export type UserStatus = "active" | "passive";
 export type PermissionOverrideEffect = "allow" | "deny";
+export type UserListScope = "current" | "archived" | "all";
 
 export type PermissionOverride = {
   permissionId: string;
@@ -18,6 +19,7 @@ export type UserRow = RowDataPacket & {
   role_name: string;
   created_at: string;
   last_login_at: string | null;
+  archived_at: string | null;
   permission_overrides: unknown;
   permissions: unknown;
 };
@@ -32,6 +34,7 @@ export type UserDto = {
   roleName: string;
   createdAt: string;
   lastLoginAt: string | null;
+  archivedAt: string | null;
   permissionOverrides: PermissionOverride[];
   permissions: string[];
 };

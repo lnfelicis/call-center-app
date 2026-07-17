@@ -14,6 +14,7 @@ describe("user mapper", () => {
       role_name: "Yönetici",
       created_at: "2026-07-13 10:00:00",
       last_login_at: null,
+      archived_at: null,
       permission_overrides: JSON.stringify([
         { permissionId: "logs.view", effect: "deny" },
       ]),
@@ -30,6 +31,7 @@ describe("user mapper", () => {
       roleName: "Yönetici",
       createdAt: "2026-07-13 10:00:00",
       lastLoginAt: null,
+      archivedAt: null,
       permissionOverrides: [{ permissionId: "logs.view", effect: "deny" }],
       permissions: ["calls.view.own"],
     });
@@ -43,6 +45,7 @@ describe("user mapper", () => {
       "roleName",
       "createdAt",
       "lastLoginAt",
+      "archivedAt",
       "permissionOverrides",
       "permissions",
     ]);

@@ -8,6 +8,7 @@ import {
   Field,
   FieldContent,
   FieldDescription,
+  FieldGroup,
   FieldLabel,
   FieldLegend,
   FieldSet,
@@ -87,41 +88,45 @@ export function UserPermissionOverrides({
       </div>
 
       {Object.entries(permissionsByGroup).map(([groupName, groupPermissions]) => (
-        <FieldSet key={groupName}>
+        <FieldSet key={groupName} className="gap-3">
           <FieldLegend className="flex items-center gap-2" variant="label">
             <ShieldCheck />
             {groupName}
           </FieldLegend>
-          {groupPermissions.map((permission) => {
-            const roleIncludesPermission = role?.permissions.includes(permission.id) ?? false
-            const effect = overrideByPermission.get(permission.id)
-            const checked = effect === "allow" || (roleIncludesPermission && effect !== "deny")
-            const fieldId = `${idPrefix}-${permission.id}`
+          <FieldGroup className="gap-3">
+            {groupPermissions.map((permission) => {
+              const roleIncludesPermission = role?.permissions.includes(permission.id) ?? false
+              const effect = overrideByPermission.get(permission.id)
+              const checked = effect === "allow" || (roleIncludesPermission && effect !== "deny")
+              const fieldId = `${idPrefix}-${permission.id}`
 
-            return (
-              <Field key={permission.id} orientation="horizontal" data-disabled={disabled}>
-                <Checkbox
-                  id={fieldId}
-                  checked={checked}
-                  disabled={disabled}
-                  onCheckedChange={() => togglePermission(permission.id)}
-                />
-                <FieldContent>
-                  <FieldLabel htmlFor={fieldId}>
-                    <FieldTitle>{permission.label}</FieldTitle>
-                    {effect === "allow" ? (
-                      <Badge variant="secondary">Özel verildi</Badge>
-                    ) : effect === "deny" ? (
-                      <Badge variant="outline">Özel engellendi</Badge>
-                    ) : roleIncludesPermission ? (
-                      <Badge variant="outline">Rolden geliyor</Badge>
-                    ) : null}
-                  </FieldLabel>
-                  <FieldDescription>{permission.description}</FieldDescription>
-                </FieldContent>
-              </Field>
-            )
-          })}
+              return (
+                <FieldLabel key={permission.id} htmlFor={fieldId}>
+                  <Field orientation="horizontal" data-disabled={disabled}>
+                    <Checkbox
+                      id={fieldId}
+                      checked={checked}
+                      disabled={disabled}
+                      onCheckedChange={() => togglePermission(permission.id)}
+                    />
+                    <FieldContent>
+                      <FieldTitle>
+                        {permission.label}
+                        {effect === "allow" ? (
+                          <Badge variant="secondary">Özel verildi</Badge>
+                        ) : effect === "deny" ? (
+                          <Badge variant="outline">Özel engellendi</Badge>
+                        ) : roleIncludesPermission ? (
+                          <Badge variant="outline">Rolden geliyor</Badge>
+                        ) : null}
+                      </FieldTitle>
+                      <FieldDescription>{permission.description}</FieldDescription>
+                    </FieldContent>
+                  </Field>
+                </FieldLabel>
+              )
+            })}
+          </FieldGroup>
         </FieldSet>
       ))}
     </div>

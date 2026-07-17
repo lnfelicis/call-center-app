@@ -65,7 +65,7 @@ export function AppShell() {
         currentUser={panel.currentUser}
         roleCount={panel.roles.length}
         permissionCount={panel.permissions.length}
-        userCount={panel.users.length}
+        userCount={panel.users.filter((user) => !user.archivedAt).length}
         isLoading={panel.isLoading}
         onNavigate={panel.setActiveModule}
         onRefresh={() => void panel.loadPanelData()}
@@ -102,7 +102,7 @@ export function AppShell() {
               userPermissions={panel.currentUser.permissions}
               roleCount={panel.roles.length}
               permissionCount={panel.permissions.length}
-              userCount={panel.users.length}
+              userCount={panel.users.filter((user) => !user.archivedAt).length}
               request={panel.request}
             />
           )}
@@ -114,9 +114,13 @@ export function AppShell() {
               permissionsByGroup={panel.permissionsByGroup}
               userForm={panel.userForm}
               isLoading={panel.isLoading}
+              currentUserId={panel.currentUser.id}
               onUserFormChange={panel.setUserForm}
               onCreateUser={panel.createUser}
-              onUpdateUser={(userId, payload) => void panel.updateUser(userId, payload)}
+              onUpdateUser={panel.updateUser}
+              onArchiveUser={panel.archiveUser}
+              onRestoreUser={panel.restoreUser}
+              onRefresh={panel.loadPanelData}
             />
           )}
 

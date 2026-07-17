@@ -142,7 +142,7 @@ export function useAdminPanel() {
             ? fetchPanelData("/roles")
             : Promise.resolve({ roles: [] }),
           canManageUsers || canViewReports
-            ? fetchPanelData(`/${canManageUsers ? "users" : "users/options"}`)
+            ? fetchPanelData(`/${canManageUsers ? "users?scope=all" : "users/options"}`)
             : Promise.resolve({ users: [] }),
         ])
 
@@ -363,7 +363,7 @@ export function useAdminPanel() {
     if (!isPasswordValid(userForm.password)) {
       setMessage("Şifre gereksinimleri karşılanmadan kullanıcı oluşturulamaz.")
       setIsLoading(false)
-      return
+      return false
     }
 
     try {
@@ -375,8 +375,10 @@ export function useAdminPanel() {
       setMessage("Kullanıcı oluşturuldu.")
       toast.success("Kullanıcı oluşturuldu.")
       await loadPanelData()
+      return true
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Kullanıcı oluşturulamadı.")
+      return false
     } finally {
       setIsLoading(false)
     }
@@ -400,8 +402,46 @@ export function useAdminPanel() {
       setMessage("Kullanıcı güncellendi.")
       toast.success("Kullanıcı güncellendi.")
       await loadPanelData()
+      return true
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Kullanıcı güncellenemedi.")
+      return false
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function archiveUser(userId: string) {
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      await request(`/users/${userId}`, { method: "DELETE" })
+      setMessage("Kullanıcı silindi; geçmiş kayıtları korundu.")
+      toast.success("Kullanıcı silindi.")
+      await loadPanelData()
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Kullanıcı silinemedi.")
+      return false
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function restoreUser(userId: string) {
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      await request(`/users/${userId}/restore`, { method: "POST" })
+      setMessage("Kullanıcı geri yüklendi.")
+      toast.success("Kullanıcı geri yüklendi.")
+      await loadPanelData()
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Kullanıcı geri yüklenemedi.")
+      return false
     } finally {
       setIsLoading(false)
     }
@@ -426,6 +466,8 @@ export function useAdminPanel() {
     createRole,
     createUser,
     updateUser,
+    archiveUser,
+    restoreUser,
     handleLogin,
     handleLogout,
     loadPanelData,

@@ -4,12 +4,23 @@ import { HttpError } from "../../http/errors.js";
 import type { AuditWriter } from "../audit/types.js";
 import { mapUserRow } from "./mapper.js";
 import type { UserRepository } from "./repository.js";
-import type { CreateUserInput, PermissionOverride, UpdateUserInput } from "./types.js";
+import type {
+  CreateUserInput,
+  PermissionOverride,
+  UpdateUserInput,
+  UserListScope,
+} from "./types.js";
 
 export type UserServiceDependencies = {
   repository: Pick<
     UserRepository,
-    "listActive" | "listAll" | "permissionIdsExist" | "create" | "update"
+    | "listActive"
+    | "listAll"
+    | "permissionIdsExist"
+    | "create"
+    | "update"
+    | "archive"
+    | "restore"
   >;
   idGenerator: () => string;
   hashPassword: (password: string) => Promise<string>;
@@ -23,8 +34,8 @@ export class UserService {
     return (await this.dependencies.repository.listActive()).map(mapUserRow);
   }
 
-  async listAll() {
-    return (await this.dependencies.repository.listAll()).map(mapUserRow);
+  async listAll(scope: UserListScope = "current") {
+    return (await this.dependencies.repository.listAll(scope)).map(mapUserRow);
   }
 
   async create(req: Request, input: CreateUserInput) {
@@ -87,6 +98,46 @@ export class UserService {
       );
     }
 
+    return true;
+  }
+
+  async archive(req: Request, userId: string) {
+    if (userId === SUPER_ADMIN_USER_ID) {
+      throw new HttpError(400, { message: "Ana Süper Admin hesabı silinemez." });
+    }
+
+    if (userId === req.user?.id) {
+      throw new HttpError(400, { message: "Oturum açtığınız hesabı silemezsiniz." });
+    }
+
+    const affectedRows = await this.dependencies.repository.archive(userId);
+    if (affectedRows === 0) {
+      return false;
+    }
+
+    await this.dependencies.writeAuditLog({
+      req,
+      action: "user.archive",
+      entityType: "user",
+      entityId: userId,
+      metadata: {},
+    });
+    return true;
+  }
+
+  async restore(req: Request, userId: string) {
+    const affectedRows = await this.dependencies.repository.restore(userId);
+    if (affectedRows === 0) {
+      return false;
+    }
+
+    await this.dependencies.writeAuditLog({
+      req,
+      action: "user.restore",
+      entityType: "user",
+      entityId: userId,
+      metadata: {},
+    });
     return true;
   }
 

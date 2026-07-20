@@ -177,6 +177,21 @@ async function runSchema(database: Database) {
       throw error;
     }
   }
+
+  for (const statement of [
+    "ALTER TABLE notifications ADD COLUMN entity_label VARCHAR(255) NULL AFTER entity_id",
+    "ALTER TABLE audit_logs ADD COLUMN entity_label VARCHAR(255) NULL AFTER entity_id",
+  ]) {
+    try {
+      await database.query(statement);
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+
+      if (code !== "ER_DUP_FIELDNAME") {
+        throw error;
+      }
+    }
+  }
 }
 
 async function seedPermissions(database: Database) {
@@ -290,12 +305,13 @@ async function seedSuperAdminUser(
 
   await database.query(
     `INSERT INTO audit_logs
-      (id, actor_user_id, action, entity_type, entity_id, metadata)
-    VALUES (?, ?, 'seed.super_admin', 'user', ?, ?)`,
+      (id, actor_user_id, action, entity_type, entity_id, entity_label, metadata)
+    VALUES (?, ?, 'seed.super_admin', 'user', ?, ?, ?)`,
     [
       dependencies.generateId(),
       SUPER_ADMIN_USER_ID,
       SUPER_ADMIN_USER_ID,
+      email,
       JSON.stringify({ username, role: "Süper Admin" }),
     ],
   );

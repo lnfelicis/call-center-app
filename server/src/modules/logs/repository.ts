@@ -15,6 +15,7 @@ export class LogRepository {
         audit_logs.action,
         audit_logs.entity_type,
         audit_logs.entity_id,
+        audit_logs.entity_label,
         audit_logs.metadata,
         audit_logs.ip_address,
         audit_logs.user_agent,

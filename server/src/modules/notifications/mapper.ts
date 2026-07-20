@@ -9,6 +9,7 @@ export function serializeNotification(row: NotificationRow) {
     channel: row.channel,
     entityType: row.entity_type,
     entityId: row.entity_id,
+    entityLabel: row.entity_label ?? null,
     isRead: row.is_read === 1,
     readAt: row.read_at,
     createdAt: row.created_at,

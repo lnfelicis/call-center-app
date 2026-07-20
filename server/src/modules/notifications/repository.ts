@@ -35,8 +35,8 @@ export class NotificationRepository {
   async insertNotification(input: StoredNotificationInput) {
     await this.database.query(
       `INSERT IGNORE INTO notifications
-        (id, user_id, title, message, notification_type, channel, entity_type, entity_id, dedupe_key)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, user_id, title, message, notification_type, channel, entity_type, entity_id, entity_label, dedupe_key)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.id,
         input.userId,
@@ -46,6 +46,7 @@ export class NotificationRepository {
         input.channel,
         input.entityType,
         input.entityId,
+        input.entityLabel,
         input.dedupeKey,
       ],
     );
@@ -82,7 +83,7 @@ export class NotificationRepository {
 
   async listPanelNotifications(userId: string | undefined) {
     const [rows] = await this.database.query<NotificationRow[]>(
-      `SELECT id, title, message, notification_type, channel, entity_type, entity_id, is_read, read_at, created_at
+      `SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at
       FROM notifications
       WHERE user_id = ? AND channel = 'panel'
       ORDER BY is_read ASC, created_at DESC

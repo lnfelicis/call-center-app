@@ -22,6 +22,7 @@ export class NotificationService {
     type,
     entityType = null,
     entityId = null,
+    entityLabel = null,
     dedupeKey = null,
   }: NotificationInput) {
     const uniqueUserIds = [...new Set(userIds)].filter(Boolean);
@@ -53,6 +54,7 @@ export class NotificationService {
           channel,
           entityType,
           entityId,
+          entityLabel,
           dedupeKey: channelDedupeKey,
         });
       }
@@ -81,6 +83,7 @@ export class NotificationService {
           type: "call.follow_up_due",
           entityType: "call",
           entityId: call.id,
+          entityLabel: call.record_number,
           dedupeKey: `follow-up-due:${call.id}`,
         });
       }
@@ -96,6 +99,7 @@ export class NotificationService {
           type: "call.stale",
           entityType: "call",
           entityId: call.id,
+          entityLabel: call.record_number,
           dedupeKey: `stale-call:${call.id}:${settings.staleCallHours}`,
         });
       }

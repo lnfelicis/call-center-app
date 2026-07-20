@@ -57,13 +57,14 @@ describe("NotificationRepository", () => {
       channel: "email" as const,
       entityType: "call",
       entityId: "call-id",
+      entityLabel: "CAG-1",
       dedupeKey: "dedupe:user-id:email",
     };
 
     await repository.insertNotification(input);
 
     expect(compactSql(query.mock.calls[0]?.[0])).toBe(
-      "INSERT IGNORE INTO notifications (id, user_id, title, message, notification_type, channel, entity_type, entity_id, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT IGNORE INTO notifications (id, user_id, title, message, notification_type, channel, entity_type, entity_id, entity_label, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     expect(query.mock.calls[0]?.[1]).toStrictEqual([
       "notification-id",
@@ -74,6 +75,7 @@ describe("NotificationRepository", () => {
       "email",
       "call",
       "call-id",
+      "CAG-1",
       "dedupe:user-id:email",
     ]);
   });
@@ -118,6 +120,7 @@ describe("NotificationRepository", () => {
         channel: "panel",
         entity_type: null,
         entity_id: null,
+        entity_label: null,
         is_read: 0,
         read_at: null,
         created_at: "2026-01-01",
@@ -134,7 +137,7 @@ describe("NotificationRepository", () => {
     await expect(repository.markRead("notification-id", "user-id")).resolves.toBe(1);
 
     expect(compactSql(query.mock.calls[0]?.[0])).toBe(
-      "SELECT id, title, message, notification_type, channel, entity_type, entity_id, is_read, read_at, created_at FROM notifications WHERE user_id = ? AND channel = 'panel' ORDER BY is_read ASC, created_at DESC LIMIT 100",
+      "SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at FROM notifications WHERE user_id = ? AND channel = 'panel' ORDER BY is_read ASC, created_at DESC LIMIT 100",
     );
     expect(query.mock.calls[0]?.[1]).toStrictEqual(["user-id"]);
     expect(compactSql(query.mock.calls[1]?.[0])).toBe(

@@ -8,6 +8,7 @@ export function mapAuditLogRow(row: AuditLogRow) {
     action: row.action,
     entityType: row.entity_type,
     entityId: row.entity_id,
+    entityLabel: row.entity_label ?? null,
     metadata: row.metadata,
     ipAddress: row.ip_address,
     userAgent: row.user_agent,

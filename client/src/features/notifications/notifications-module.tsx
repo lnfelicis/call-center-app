@@ -18,6 +18,19 @@ type NotificationsModuleProps = {
   request: RequestFn
 }
 
+const notificationTypeLabels: Record<string, string> = {
+  "call.urgent": "Acil çağrı",
+  "call.follow_up_due": "Takip zamanı gelen çağrı",
+  "call.stale": "Çözüm bekleyen çağrı",
+}
+
+const entityLabels: Record<string, string> = {
+  call: "Çağrı",
+  user: "Kullanıcı",
+  role: "Rol",
+  notification: "Bildirim",
+}
+
 export function NotificationsModule({ request }: NotificationsModuleProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [message, setMessage] = useState("")
@@ -92,16 +105,15 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
         id: "type",
         header: "Tip",
         size: 180,
-        cell: (notification) => notification.type,
-        accessor: (notification) => notification.type,
+        cell: (notification) => notificationTypeLabels[notification.type] ?? "Sistem bildirimi",
+        accessor: (notification) => `${notificationTypeLabels[notification.type] ?? "Sistem bildirimi"} ${notification.type}`,
       },
       {
         id: "entity",
         header: "Kayıt",
         size: 160,
-        cell: (notification) =>
-          notification.entityType ? `${notification.entityType}:${notification.entityId ?? "-"}` : "-",
-        accessor: (notification) => `${notification.entityType ?? ""} ${notification.entityId ?? ""}`,
+        cell: (notification) => formatEntity(notification),
+        accessor: (notification) => `${notification.entityType ?? ""} ${notification.entityLabel ?? ""}`,
       },
       {
         id: "createdAt",
@@ -156,6 +168,15 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
       </Card>
     </div>
   )
+}
+
+function formatEntity(notification: AppNotification) {
+  if (!notification.entityType) {
+    return "-"
+  }
+
+  const typeLabel = entityLabels[notification.entityType] ?? "Kayıt"
+  return notification.entityLabel ? `${typeLabel} · ${notification.entityLabel}` : typeLabel
 }
 
 function formatDate(value: string) {

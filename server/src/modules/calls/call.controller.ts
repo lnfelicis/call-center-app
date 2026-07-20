@@ -472,6 +472,7 @@ async function createCall(req: AuthenticatedRequest, res: Response) {
       type: "call.urgent",
       entityType: "call",
       entityId: callId,
+      entityLabel: recordNumber,
       dedupeKey: `urgent-call:${callId}`,
     });
   }
@@ -715,6 +716,7 @@ async function updateCall(req: AuthenticatedRequest, res: Response) {
       type: "call.urgent",
       entityType: "call",
       entityId: call.id,
+      entityLabel: call.record_number,
       dedupeKey: `urgent-call:${call.id}`,
     });
   }

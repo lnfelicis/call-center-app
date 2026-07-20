@@ -491,6 +491,7 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
       "channel",
       "entityType",
       "entityId",
+      "entityLabel",
       "isRead",
       "readAt",
       "createdAt",
@@ -502,6 +503,7 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
       channel: "panel",
       entityType: "call",
       entityId: dueFollowUpCall.id,
+      entityLabel: dueFollowUpCall.recordNumber,
       isRead: false,
       readAt: null,
     });

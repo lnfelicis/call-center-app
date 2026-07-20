@@ -111,6 +111,7 @@ export type NotificationPublisher = (
     type: string;
     entityType?: string | null;
     entityId?: string | null;
+    entityLabel?: string | null;
     dedupeKey?: string | null;
   },
 ) => Promise<void>;

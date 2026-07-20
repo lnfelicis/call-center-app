@@ -53,6 +53,7 @@ describe("notification service", () => {
       channel: "panel",
       entityType: null,
       entityId: null,
+      entityLabel: null,
       dedupeKey: "dedupe:user-1:panel",
     });
     expect(repository.insertNotification).toHaveBeenNthCalledWith(2, {
@@ -64,6 +65,7 @@ describe("notification service", () => {
       channel: "email",
       entityType: null,
       entityId: null,
+      entityLabel: null,
       dedupeKey: "dedupe:user-1:email",
     });
   });
@@ -121,6 +123,7 @@ describe("notification service", () => {
       channel: "panel",
       entityType: null,
       entityId: null,
+      entityLabel: null,
       dedupeKey: null,
     });
   });
@@ -215,6 +218,7 @@ describe("notification service", () => {
       type: "call.follow_up_due",
       entityType: "call",
       entityId: "follow-up-1",
+      entityLabel: "C-1",
       dedupeKey: "follow-up-due:follow-up-1",
     });
     expect(createNotifications).toHaveBeenNthCalledWith(2, {
@@ -224,6 +228,7 @@ describe("notification service", () => {
       type: "call.follow_up_due",
       entityType: "call",
       entityId: "follow-up-2",
+      entityLabel: "C-2",
       dedupeKey: "follow-up-due:follow-up-2",
     });
     expect(notifyUsers).toHaveBeenCalledWith(
@@ -234,6 +239,7 @@ describe("notification service", () => {
         type: "call.stale",
         entityType: "call",
         entityId: "stale-1",
+        entityLabel: "C-3",
         dedupeKey: "stale-call:stale-1:24",
       },
     );
@@ -295,6 +301,7 @@ describe("notification mapper and controller", () => {
       "channel",
       "entityType",
       "entityId",
+      "entityLabel",
       "isRead",
       "readAt",
       "createdAt",
@@ -352,6 +359,7 @@ describe("notification mapper and controller", () => {
           channel: "panel",
           entityType: null,
           entityId: null,
+          entityLabel: null,
           isRead: false,
           readAt: null,
           createdAt: "2026-01-01",

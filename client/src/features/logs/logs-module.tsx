@@ -20,9 +20,13 @@ type LogsModuleProps = {
 
 const actionLabels: Record<string, string> = {
   "auth.login": "Oturum açıldı",
+  "auth.login.blocked": "Oturum açma denemesi engellendi",
   "auth.logout": "Oturum kapatıldı",
   "user.create": "Kullanıcı oluşturuldu",
   "user.update": "Kullanıcı güncellendi",
+  "user.archive": "Kullanıcı arşivlendi",
+  "user.restore": "Kullanıcı geri yüklendi",
+  "user.permission_overrides.update": "Kullanıcı izinleri güncellendi",
   "role.create": "Rol oluşturuldu",
   "role.update": "Rol güncellendi",
   "role.permissions.update": "Rol izinleri güncellendi",
@@ -34,11 +38,14 @@ const actionLabels: Record<string, string> = {
   "call.resolve": "Çağrı çözüldü",
   "call.reopen": "Çağrı yeniden açıldı",
   "settings.update": "Ayarlar güncellendi",
+  "settings.security.update": "Güvenlik ve bildirim ayarları güncellendi",
   "settings.option.create": "Ayar seçeneği eklendi",
   "settings.option.update": "Ayar seçeneği güncellendi",
   "call_option.create": "Çağrı formu seçeneği eklendi",
   "call_option.update": "Çağrı formu seçeneği güncellendi",
   "call_option.bulk_update": "Çağrı formu seçenekleri toplu güncellendi",
+  "notification.read": "Bildirim okundu olarak işaretlendi",
+  "reports.export": "Rapor dışa aktarıldı",
   "seed.super_admin": "Süper Admin seed edildi",
 }
 
@@ -48,6 +55,8 @@ const entityLabels: Record<string, string> = {
   role: "Rol",
   settings: "Ayarlar",
   call_form_option: "Form seçeneği",
+  notification: "Bildirim",
+  report: "Rapor",
 }
 
 const fieldLabels: Record<string, string> = {
@@ -61,6 +70,48 @@ const fieldLabels: Record<string, string> = {
   priority: "Öncelik",
   needsFollowUp: "Takip gerekiyor",
   followUpAt: "Takip tarihi",
+  status: "Durum",
+  isActive: "Aktiflik",
+  noteType: "Not tipi",
+  resolutionCategory: "Çözüm kategorisi",
+  format: "Dosya biçimi",
+  rowCount: "Kayıt sayısı",
+  count: "Adet",
+  label: "Ad",
+  type: "Tür",
+}
+
+const statusLabels: Record<string, string> = {
+  active: "Aktif",
+  passive: "Pasif",
+  open: "Açık",
+  in_progress: "İşlemde",
+  waiting: "Yanıt bekliyor",
+  follow_up: "Takip edilecek",
+  transferred: "Yetkiliye aktarıldı",
+  pending: "Bekliyor",
+  resolved: "Çözüldü",
+  closed: "Kapatıldı",
+  archived: "Arşiv",
+  cancelled: "İptal",
+  duplicate: "Mükerrer",
+}
+
+const optionTypeLabels: Record<string, string> = {
+  interaction_type: "Görüşme tipi",
+  issue_category: "Sorun kategorisi",
+  issue_sub_category: "Sorun alt kategorisi",
+  status: "Durum",
+  priority: "Öncelik",
+  resolution_category: "Çözüm kategorisi",
+}
+
+const noteTypeLabels: Record<string, string> = {
+  personnel: "Personel notu",
+  follow_up: "Takip notu",
+  assigned_personnel: "Atanan personel notu",
+  internal: "İç not",
+  manager: "Yönetici notu",
 }
 
 export function LogsModule({ request }: LogsModuleProps) {
@@ -96,13 +147,8 @@ export function LogsModule({ request }: LogsModuleProps) {
         size: 230,
         minSize: 160,
         maxSize: 420,
-        accessor: (log) => `${actionLabels[log.action] ?? log.action} ${log.action}`,
-        cell: (log) => (
-          <div>
-            <strong className="block font-medium text-foreground">{actionLabels[log.action] ?? log.action}</strong>
-            <span className="mt-1 block text-xs text-muted-foreground">{log.action}</span>
-          </div>
-        ),
+        accessor: (log) => `${getActionLabel(log.action)} ${log.action}`,
+        cell: (log) => <span className="font-medium text-foreground">{getActionLabel(log.action)}</span>,
       },
       {
         id: "entity",
@@ -110,12 +156,12 @@ export function LogsModule({ request }: LogsModuleProps) {
         size: 150,
         minSize: 120,
         maxSize: 260,
-        accessor: (log) => `${entityLabels[log.entityType] ?? log.entityType} ${log.entityId ?? ""}`,
+        accessor: (log) => `${entityLabels[log.entityType] ?? "Kayıt"} ${log.entityLabel ?? ""}`,
         cell: (log) => (
-          <div>
-            <span className="block">{entityLabels[log.entityType] ?? log.entityType}</span>
-            {log.entityId && <span className="text-xs">{log.entityId.slice(0, 8)}</span>}
-          </div>
+          <span>
+            {entityLabels[log.entityType] ?? "Kayıt"}
+            {log.entityLabel ? ` · ${log.entityLabel}` : ""}
+          </span>
         ),
       },
       {
@@ -191,6 +237,16 @@ export function LogsModule({ request }: LogsModuleProps) {
 function describeLog(log: AuditLog) {
   const metadata = normalizeMetadata(log.metadata)
 
+  if (log.action === "user.permission_overrides.update") {
+    const roleName = asNonEmptyString(metadata.roleName)
+    const grantedCount = asCount(metadata.grantedPermissionCount, metadata.grantedPermissions)
+    const deniedCount = asCount(metadata.deniedPermissionCount, metadata.deniedPermissions)
+    const overrideCount = grantedCount + deniedCount
+    return [roleName ? `Rol: ${roleName}` : null, `${overrideCount} özel izin`]
+      .filter(Boolean)
+      .join(" · ")
+  }
+
   if (log.action === "call.update") {
     const updatedFields = asStringArray(metadata.updatedFields)
     return updatedFields.length > 0
@@ -205,22 +261,38 @@ function describeLog(log: AuditLog) {
   if (log.action.includes("option")) {
     const label = typeof metadata.label === "string" ? metadata.label : null
     const type = typeof metadata.type === "string" ? metadata.type : null
-    return [label, type].filter(Boolean).join(" / ") || "Form seçeneği değiştirildi."
+    return [label, type ? optionTypeLabels[type] ?? type : null].filter(Boolean).join(" · ") || "Form seçeneği değiştirildi."
   }
 
   if (log.action === "user.create" || log.action === "user.update") {
     const email = typeof metadata.email === "string" ? metadata.email : null
     const status = typeof metadata.status === "string" ? metadata.status : null
-    return [email, status ? `Durum: ${status}` : null].filter(Boolean).join(" · ") || "Kullanıcı kaydı değişti."
+    return [email, status ? `Durum: ${translateStatus(status)}` : null].filter(Boolean).join(" · ") || "Kullanıcı kaydı değişti."
+  }
+
+  if (log.action === "user.archive") {
+    return "Kullanıcı arşive taşındı."
+  }
+
+  if (log.action === "user.restore") {
+    return "Kullanıcı yeniden etkin kayıtlara alındı."
   }
 
   if (log.action === "role.permissions.update") {
-    const permissionCount = Number(metadata.permissionCount ?? metadata.count ?? 0)
+    const permissionCount = asCount(metadata.permissionCount, metadata.permissions)
     return permissionCount > 0 ? `${permissionCount} izin kaydedildi.` : "Rol izinleri değiştirildi."
   }
 
+  if (log.action === "role.create" || log.action === "role.update") {
+    const name = asNonEmptyString(metadata.name)
+    const isActive = typeof metadata.isActive === "boolean" ? metadata.isActive : null
+    return [name ? `Rol: ${name}` : null, isActive === null ? null : `Durum: ${isActive ? "Aktif" : "Pasif"}`]
+      .filter(Boolean)
+      .join(" · ") || "Rol bilgileri değiştirildi."
+  }
+
   if (log.action === "call.status.update") {
-    return typeof metadata.status === "string" ? `Yeni durum: ${metadata.status}.` : "Çağrı durumu değiştirildi."
+    return typeof metadata.status === "string" ? `Yeni durum: ${translateStatus(metadata.status)}.` : "Çağrı durumu değiştirildi."
   }
 
   if (log.action === "call.resolve") {
@@ -231,6 +303,47 @@ function describeLog(log: AuditLog) {
 
   if (log.action === "call.create") {
     return typeof metadata.recordNumber === "string" ? `Kayıt no: ${metadata.recordNumber}.` : "Yeni çağrı kaydı açıldı."
+  }
+
+  if (log.action === "call.assign") {
+    const previous = asNonEmptyString(metadata.previousAssignedToName) ?? "Atanmamış"
+    const next = asNonEmptyString(metadata.assignedToName) ?? "Atanmamış"
+    return `Atama: ${previous} → ${next}.`
+  }
+
+  if (log.action === "call.note.create") {
+    const noteType = asNonEmptyString(metadata.noteType)
+    return noteType ? `Not tipi: ${noteTypeLabels[noteType] ?? "Çağrı notu"}.` : "Çağrı kaydına not eklendi."
+  }
+
+  if (log.action === "call.reopen") {
+    return "Çözülen çağrı yeniden açıldı."
+  }
+
+  if (log.action === "auth.login") {
+    return "Kullanıcı başarıyla oturum açtı."
+  }
+
+  if (log.action === "auth.logout") {
+    return "Kullanıcı oturumunu kapattı."
+  }
+
+  if (log.action === "auth.login.blocked") {
+    return "Başarısız giriş sınırı aşıldı."
+  }
+
+  if (log.action === "reports.export") {
+    const format = String(metadata.format ?? "").toLocaleUpperCase("tr-TR")
+    const rowCount = Number(metadata.rowCount ?? 0)
+    return `${format || "Rapor"} dosyasına ${rowCount} kayıt aktarıldı.`
+  }
+
+  if (log.action === "notification.read") {
+    return "Bildirim okundu olarak işaretlendi."
+  }
+
+  if (log.action === "settings.security.update") {
+    return "Güvenlik, bildirim ve gizlilik ayarları kaydedildi."
   }
 
   return summarizeMetadata(metadata)
@@ -262,7 +375,7 @@ function asStringArray(value: unknown) {
 }
 
 function summarizeMetadata(metadata: Record<string, unknown>) {
-  const entries = Object.entries(metadata)
+  const entries = Object.entries(metadata).filter(([key]) => !isTechnicalMetadataKey(key))
 
   if (entries.length === 0) {
     return "Ek detay yok."
@@ -270,20 +383,62 @@ function summarizeMetadata(metadata: Record<string, unknown>) {
 
   return entries
     .slice(0, 4)
-    .map(([key, value]) => `${key}: ${formatValue(value)}`)
+    .map(([key, value]) => `${fieldLabels[key] ?? humanizeKey(key)}: ${formatValue(value, key)}`)
     .join(" · ")
 }
 
-function formatValue(value: unknown): string {
+function formatValue(value: unknown, key?: string): string {
   if (Array.isArray(value)) {
-    return value.join(", ")
+    return `${value.length} öğe`
   }
 
   if (value && typeof value === "object") {
-    return JSON.stringify(value)
+    return "Detay kaydedildi"
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Evet" : "Hayır"
+  }
+
+  if (typeof value === "string" && key?.toLocaleLowerCase("tr-TR").includes("status")) {
+    return translateStatus(value)
   }
 
   return String(value ?? "-")
+}
+
+function getActionLabel(action: string) {
+  const label = actionLabels[action] ?? "Sistem işlemi gerçekleştirildi"
+  return label.endsWith(".") ? label : `${label}.`
+}
+
+function translateStatus(status: string) {
+  return statusLabels[status] ?? status
+}
+
+function asNonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null
+}
+
+function asCount(value: unknown, fallback: unknown) {
+  const count = Number(value)
+  if (Number.isFinite(count)) {
+    return count
+  }
+  return Array.isArray(fallback) ? fallback.length : 0
+}
+
+function isTechnicalMetadataKey(key: string) {
+  const normalized = key.toLocaleLowerCase("tr-TR")
+  return normalized.endsWith("id") || normalized.endsWith("ids") || normalized.includes("permission")
+}
+
+function humanizeKey(key: string) {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .trim()
+  return spaced ? `${spaced.charAt(0).toLocaleUpperCase("tr-TR")}${spaced.slice(1)}` : "Detay"
 }
 
 function formatDate(value: string) {

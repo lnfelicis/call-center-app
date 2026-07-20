@@ -11,6 +11,7 @@ export type NotificationInput = {
   type: string;
   entityType?: string | null;
   entityId?: string | null;
+  entityLabel?: string | null;
   dedupeKey?: string | null;
 };
 
@@ -23,6 +24,7 @@ export type StoredNotificationInput = {
   channel: "panel" | "email";
   entityType: string | null;
   entityId: string | null;
+  entityLabel: string | null;
   dedupeKey: string | null;
 };
 
@@ -46,6 +48,7 @@ export type NotificationRow = RowDataPacket & {
   channel: "panel" | "email";
   entity_type: string | null;
   entity_id: string | null;
+  entity_label: string | null;
   is_read: 0 | 1;
   read_at: string | null;
   created_at: string;

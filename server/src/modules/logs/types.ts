@@ -7,6 +7,7 @@ export type AuditLogRow = RowDataPacket & {
   action: string;
   entity_type: string;
   entity_id: string | null;
+  entity_label: string | null;
   metadata: unknown;
   ip_address: string | null;
   user_agent: string | null;

@@ -6,7 +6,13 @@ import type { AuthenticatedRequest } from "../../../src/modules/auth/types.js";
 
 describe("audit writer", () => {
   it("persists actor, metadata, IP and user agent with injected ID generation", async () => {
-    const repository = { insert: vi.fn().mockResolvedValue(undefined) } as unknown as AuditRepository;
+    const repository = {
+      insert: vi.fn().mockResolvedValue(undefined),
+      resolveSnapshot: vi.fn().mockResolvedValue({
+        entityLabel: "test@example.com",
+        roleName: "Personel Manager",
+      }),
+    } as unknown as AuditRepository;
     const request = {
       user: { id: "actor-1" },
       header: vi.fn().mockReturnValue("test-agent"),
@@ -22,7 +28,11 @@ describe("audit writer", () => {
       action: "user.update",
       entityType: "user",
       entityId: "user-1",
-      metadata: { roleId: "role-1" },
+      metadata: {
+        roleId: "role-1",
+        grantedPermissions: ["calls.create"],
+        deniedPermissions: ["calls.assign"],
+      },
     });
 
     expect(repository.insert).toHaveBeenCalledWith({
@@ -31,14 +41,18 @@ describe("audit writer", () => {
       action: "user.update",
       entityType: "user",
       entityId: "user-1",
-      metadata: '{"roleId":"role-1"}',
+      entityLabel: "test@example.com",
+      metadata: '{"roleId":"role-1","grantedPermissions":["calls.create"],"deniedPermissions":["calls.assign"],"roleName":"Personel Manager","grantedPermissionCount":1,"deniedPermissionCount":1}',
       ipAddress: "10.0.0.8",
       userAgent: "test-agent",
     });
   });
 
   it("keeps null/default values for unauthenticated audit events", async () => {
-    const repository = { insert: vi.fn().mockResolvedValue(undefined) } as unknown as AuditRepository;
+    const repository = {
+      insert: vi.fn().mockResolvedValue(undefined),
+      resolveSnapshot: vi.fn().mockResolvedValue({ entityLabel: null, roleName: null }),
+    } as unknown as AuditRepository;
     const request = { header: vi.fn().mockReturnValue(undefined) } as unknown as Request;
     const writer = createAuditWriter({
       repository,
@@ -54,6 +68,7 @@ describe("audit writer", () => {
       action: "auth.login",
       entityType: "user",
       entityId: null,
+      entityLabel: null,
       metadata: "{}",
       ipAddress: null,
       userAgent: null,

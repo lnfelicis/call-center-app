@@ -199,6 +199,7 @@ export type AuditLog = {
   action: string
   entityType: string
   entityId: string | null
+  entityLabel: string | null
   metadata: unknown
   ipAddress: string | null
   userAgent: string | null
@@ -295,6 +296,7 @@ export type AppNotification = {
   channel: "panel" | "email"
   entityType: string | null
   entityId: string | null
+  entityLabel: string | null
   isRead: boolean
   readAt: string | null
   createdAt: string

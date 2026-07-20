@@ -54,6 +54,7 @@ export const apiRouteManifest: ApiRouteContract[] = [
   { method: "POST", path: "/users/:id/restore" },
   { method: "GET", path: "/logs" },
   { method: "GET", path: "/notifications" },
+  { method: "GET", path: "/notifications/summary" },
   { method: "PATCH", path: "/notifications/:id/read" },
 ];
 
@@ -78,6 +79,7 @@ export const protectedApiEndpoints: ApiEndpoint[] = [
   { method: "post", path: "/calls/test-id/reopen" },
   { method: "get", path: "/logs" },
   { method: "get", path: "/notifications" },
+  { method: "get", path: "/notifications/summary" },
   { method: "patch", path: "/notifications/test-id/read" },
   { method: "get", path: "/reports/filters" },
   { method: "get", path: "/calls/search" },

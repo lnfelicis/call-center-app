@@ -6,6 +6,7 @@ import type {
   RecipientRow,
   StaleCallRow,
   StoredNotificationInput,
+  UnreadNotificationCountRow,
 } from "./types.js";
 
 export class NotificationRepository {
@@ -81,17 +82,41 @@ export class NotificationRepository {
     return rows;
   }
 
-  async listPanelNotifications(userId: string | undefined) {
+  async listPanelNotifications(userId: string | undefined, limit = 100) {
     const [rows] = await this.database.query<NotificationRow[]>(
       `SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at
       FROM notifications
       WHERE user_id = ? AND channel = 'panel'
       ORDER BY is_read ASC, created_at DESC
-      LIMIT 100`,
-      [userId],
+      LIMIT ?`,
+      [userId, limit],
     );
 
     return rows;
+  }
+
+  async listRecentPanelNotifications(userId: string | undefined, limit = 5) {
+    const [rows] = await this.database.query<NotificationRow[]>(
+      `SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at
+      FROM notifications
+      WHERE user_id = ? AND channel = 'panel'
+      ORDER BY created_at DESC
+      LIMIT ?`,
+      [userId, limit],
+    );
+
+    return rows;
+  }
+
+  async countUnreadPanelNotifications(userId: string | undefined) {
+    const [rows] = await this.database.query<UnreadNotificationCountRow[]>(
+      `SELECT COUNT(*) AS total
+      FROM notifications
+      WHERE user_id = ? AND channel = 'panel' AND is_read = 0`,
+      [userId],
+    );
+
+    return Number(rows[0]?.total ?? 0);
   }
 
   async markRead(notificationId: string, userId: string | undefined) {

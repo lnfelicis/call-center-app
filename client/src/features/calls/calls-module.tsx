@@ -64,6 +64,8 @@ import type {
 type CallsModuleProps = {
   currentUser: AuthUser;
   request: RequestFn;
+  requestedCallId?: string | null;
+  onRequestedCallHandled?: () => void;
 };
 
 type CallFormKey = keyof CallForm;
@@ -126,7 +128,12 @@ const noteTypeLabels = {
   manager: "Yönetici Notu",
 };
 
-export function CallsModule({ currentUser, request }: CallsModuleProps) {
+export function CallsModule({
+  currentUser,
+  request,
+  requestedCallId,
+  onRequestedCallHandled,
+}: CallsModuleProps) {
   const toast = useToast();
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [callOptions, setCallOptions] = useState<CallFormOption[]>([]);
@@ -691,6 +698,21 @@ export function CallsModule({ currentUser, request }: CallsModuleProps) {
   useEffect(() => {
     void loadCallDetail(selectedCallId);
   }, [selectedCallId]);
+
+  useEffect(() => {
+    if (!requestedCallId) {
+      return;
+    }
+
+    if (canViewAll) {
+      setActiveScope("all");
+    }
+
+    setSelectedCallId(requestedCallId);
+    setDetailTab("summary");
+    setIsDetailOpen(true);
+    onRequestedCallHandled?.();
+  }, [canViewAll, onRequestedCallHandled, requestedCallId]);
 
   useEffect(() => {
     const controller = new AbortController();

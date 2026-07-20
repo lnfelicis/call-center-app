@@ -88,6 +88,7 @@ export function createAppRouters({
       auditWriter,
       notifyUsersWithAnyPermission:
         notificationService.notifyUsersWithAnyPermission.bind(notificationService),
+      createNotifications: notificationService.createNotifications.bind(notificationService),
       readNotificationSettings: () => appSettings.read("notification_settings"),
       idGenerator,
       clock,

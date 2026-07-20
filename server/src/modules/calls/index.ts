@@ -15,6 +15,7 @@ export type CallModuleDependencies = {
     permissionIds: string[],
     notification: Omit<NotificationInput, "userIds">,
   ) => Promise<void>;
+  createNotifications: (notification: NotificationInput) => Promise<void>;
   readNotificationSettings: () => Promise<NotificationSettings>;
   idGenerator: IdGenerator;
   clock: Clock;
@@ -28,6 +29,7 @@ export function createCallRouter(dependencies: CallModuleDependencies) {
     repository: createMySqlCallRepository(dependencies.database, dependencies.idGenerator),
     auditWriter: dependencies.auditWriter,
     notificationPublisher: dependencies.notifyUsersWithAnyPermission,
+    directNotificationPublisher: dependencies.createNotifications,
     notificationSettingsReader: () => dependencies.readNotificationSettings(),
     clientIpReader: (request: Request) => getClientIp(request),
     idGenerator: dependencies.idGenerator,

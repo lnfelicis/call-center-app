@@ -4,13 +4,13 @@ import type { NotificationController } from "../../../src/modules/notifications/
 import { createNotificationRoutes } from "../../../src/modules/notifications/routes.js";
 
 describe("createNotificationRoutes", () => {
-  it("registers list and mark-read behind notifications.view", () => {
+  it("registers list, summary and mark-read behind notifications.view", () => {
     const handler = vi.fn();
     const authenticate = vi.fn() as unknown as RequestHandler;
     const authorize = vi.fn().mockReturnValue(handler) as unknown as (
       permission: string,
     ) => RequestHandler;
-    const controller = { list: handler, markRead: handler } as unknown as NotificationController;
+    const controller = { list: handler, summary: handler, markRead: handler } as unknown as NotificationController;
 
     const router = createNotificationRoutes({ controller, authenticate, authorize });
     const endpoints = (
@@ -23,10 +23,11 @@ describe("createNotificationRoutes", () => {
         : [],
     );
 
-    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(authorize).toHaveBeenCalledTimes(3);
     expect(authorize).toHaveBeenCalledWith("notifications.view");
     expect(endpoints).toStrictEqual([
       { path: "/notifications", methods: ["get"] },
+      { path: "/notifications/summary", methods: ["get"] },
       { path: "/notifications/:id/read", methods: ["patch"] },
     ]);
   });

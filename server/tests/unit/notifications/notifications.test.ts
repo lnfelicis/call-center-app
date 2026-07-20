@@ -15,6 +15,8 @@ function createService(overrides: Partial<Record<keyof NotificationRepository, u
     findDueFollowUps: vi.fn().mockResolvedValue([]),
     findStaleCalls: vi.fn().mockResolvedValue([]),
     listPanelNotifications: vi.fn().mockResolvedValue([]),
+    listRecentPanelNotifications: vi.fn().mockResolvedValue([]),
+    countUnreadPanelNotifications: vi.fn().mockResolvedValue(0),
     markRead: vi.fn().mockResolvedValue(1),
     ...overrides,
   } as unknown as NotificationRepository;
@@ -268,6 +270,24 @@ describe("notification service", () => {
     );
   });
 
+  it("generates operational notifications before returning a five-item summary", async () => {
+    const rows = [{ id: "notification-1" }] as NotificationRow[];
+    const { repository, service } = createService({
+      listRecentPanelNotifications: vi.fn().mockResolvedValue(rows),
+      countUnreadPanelNotifications: vi.fn().mockResolvedValue(7),
+    });
+
+    await expect(service.getPanelSummary("user-1")).resolves.toStrictEqual({
+      notifications: rows,
+      unreadCount: 7,
+    });
+    expect(repository.listRecentPanelNotifications).toHaveBeenCalledWith("user-1", 5);
+    expect(repository.countUnreadPanelNotifications).toHaveBeenCalledWith("user-1");
+    expect(vi.mocked(repository.findDueFollowUps).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(repository.listRecentPanelNotifications).mock.invocationCallOrder[0]!,
+    );
+  });
+
   it("proxies mark-read arguments and affected rows", async () => {
     const { repository, service } = createService({
       markRead: vi.fn().mockResolvedValue(2),
@@ -365,6 +385,44 @@ describe("notification mapper and controller", () => {
           createdAt: "2026-01-01",
         },
       ],
+    });
+  });
+
+  it("returns the unread count and serialized recent notifications", async () => {
+    const row = {
+      id: "id",
+      title: "Atama",
+      message: "C-1 size atandı.",
+      notification_type: "call.assigned",
+      channel: "panel",
+      entity_type: "call",
+      entity_id: "call-1",
+      entity_label: "C-1",
+      is_read: 0,
+      read_at: null,
+      created_at: "2026-01-01",
+    } as NotificationRow;
+    const { service } = createService();
+    vi.spyOn(service, "getPanelSummary").mockResolvedValue({
+      notifications: [row],
+      unreadCount: 3,
+    });
+    const controller = new NotificationController(service, vi.fn());
+    const json = vi.fn();
+
+    await controller.summary(
+      { user: { id: "user-1" } } as unknown as AuthenticatedRequest,
+      { json } as unknown as Response,
+    );
+
+    expect(json).toHaveBeenCalledWith({
+      unreadCount: 3,
+      notifications: [expect.objectContaining({
+        id: "id",
+        type: "call.assigned",
+        entityLabel: "C-1",
+        isRead: false,
+      })],
     });
   });
 

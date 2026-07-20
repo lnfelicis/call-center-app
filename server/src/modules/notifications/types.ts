@@ -53,3 +53,7 @@ export type NotificationRow = RowDataPacket & {
   read_at: string | null;
   created_at: string;
 };
+
+export type UnreadNotificationCountRow = RowDataPacket & {
+  total: number;
+};

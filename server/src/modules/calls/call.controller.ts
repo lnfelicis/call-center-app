@@ -42,6 +42,7 @@ import type {
   CallRow,
   ClientIpReader,
   Clock,
+  DirectNotificationPublisher,
   EventRow,
   IdGenerator,
   NoteRow,
@@ -54,6 +55,7 @@ export type CallControllerDependencies = {
   repository: CallRepository;
   auditWriter: AuditWriter;
   notificationPublisher: NotificationPublisher;
+  directNotificationPublisher: DirectNotificationPublisher;
   notificationSettingsReader: NotificationSettingsReader;
   clientIpReader: ClientIpReader;
   idGenerator: IdGenerator;
@@ -65,6 +67,7 @@ export function createCallController(dependencies: CallControllerDependencies) {
     repository,
     auditWriter: writeAuditLog,
     notificationPublisher: notifyUsersWithAnyPermission,
+    directNotificationPublisher: createNotifications,
     notificationSettingsReader: readAppSetting,
     clientIpReader: getClientIp,
     idGenerator,
@@ -97,6 +100,53 @@ export function createCallController(dependencies: CallControllerDependencies) {
     );
 
     return rows[0] ?? null;
+  }
+
+  async function notifyAssignmentChange({
+    actorUserId,
+    callId,
+    recordNumber,
+    previousAssignedToUserId,
+    assignedToUserId,
+    assignmentVersion,
+  }: {
+    actorUserId: string | undefined;
+    callId: string;
+    recordNumber: string;
+    previousAssignedToUserId: string | null;
+    assignedToUserId: string | null;
+    assignmentVersion: string;
+  }) {
+    if (previousAssignedToUserId === assignedToUserId) {
+      return;
+    }
+
+    if (assignedToUserId && assignedToUserId !== actorUserId) {
+      await createNotifications({
+        userIds: [assignedToUserId],
+        title: "Yeni çağrı atandı",
+        message: `${recordNumber} numaralı çağrı size atandı.`,
+        type: "call.assigned",
+        entityType: "call",
+        entityId: callId,
+        entityLabel: recordNumber,
+        dedupeKey: `call-assigned:${callId}:${assignmentVersion}:${assignedToUserId}`,
+      });
+    }
+
+    if (previousAssignedToUserId && previousAssignedToUserId !== actorUserId) {
+      const wasReassigned = Boolean(assignedToUserId);
+      await createNotifications({
+        userIds: [previousAssignedToUserId],
+        title: wasReassigned ? "Çağrı başka personele devredildi" : "Çağrı ataması kaldırıldı",
+        message: `${recordNumber} numaralı çağrı artık size atanmış değil.`,
+        type: wasReassigned ? "call.reassigned" : "call.unassigned",
+        entityType: "call",
+        entityId: callId,
+        entityLabel: recordNumber,
+        dedupeKey: `call-unassigned:${callId}:${assignmentVersion}:${previousAssignedToUserId}`,
+      });
+    }
   }
 
 async function ensureCanViewCall(req: AuthenticatedRequest, callId: string, res: Response) {
@@ -447,6 +497,14 @@ async function createCall(req: AuthenticatedRequest, res: Response) {
     await writeCallEvent(req, callId, "call.assigned", "Çağrı kaydı personele atandı.", {
       assignedToUserId: assignedToUser.id,
       assignedToName: assignedToUser.full_name,
+    });
+    await notifyAssignmentChange({
+      actorUserId: req.user?.id,
+      callId,
+      recordNumber,
+      previousAssignedToUserId: null,
+      assignedToUserId: assignedToUser.id,
+      assignmentVersion: "initial",
     });
   }
 
@@ -835,6 +893,15 @@ async function assignCall(req: AuthenticatedRequest, res: Response) {
       assignedToUserId: assignedToUser?.id ?? null,
       assignedToName: assignedToUser?.full_name ?? null,
     },
+  });
+
+  await notifyAssignmentChange({
+    actorUserId: req.user?.id,
+    callId: call.id,
+    recordNumber: call.record_number,
+    previousAssignedToUserId: call.assigned_to_user_id,
+    assignedToUserId: assignedToUser?.id ?? null,
+    assignmentVersion: String(call.updated_at),
   });
 
   res.json({ ok: true });

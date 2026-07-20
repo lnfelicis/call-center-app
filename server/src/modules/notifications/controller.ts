@@ -16,6 +16,15 @@ export class NotificationController {
     res.json({ notifications: rows.map(serializeNotification) });
   };
 
+  summary = async (req: AuthenticatedRequest, res: Response) => {
+    const summary = await this.service.getPanelSummary(req.user?.id);
+
+    res.json({
+      unreadCount: summary.unreadCount,
+      notifications: summary.notifications.map(serializeNotification),
+    });
+  };
+
   markRead = async (req: AuthenticatedRequest, res: Response) => {
     const notificationId = String(req.params.id ?? "");
     const affectedRows = await this.service.markRead(notificationId, req.user?.id);

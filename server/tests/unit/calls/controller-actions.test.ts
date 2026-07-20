@@ -363,27 +363,90 @@ describe("call controller assign, status, resolve and reopen", () => {
     });
   });
 
-  it("assigns nullable user ids and preserves event/audit metadata", async () => {
+  it("notifies the previous assignee when an assignment is removed", async () => {
     const harness = createControllerHarness();
+    harness.repositoryMocks.getCallById.mockResolvedValueOnce(createCallRow({
+      assigned_to_user_id: "agent-old",
+      assigned_to_name: "Old Agent",
+    }));
     const response = createControllerResponse();
 
     await harness.controller.assignCall(createControllerRequest({
       params: { id: "call-1" },
       body: { assignedToUserId: " " },
+      userId: "manager-1",
+      permissions: ["calls.view.all"],
     }), response);
 
     expect(harness.query).toHaveBeenCalledWith(
       expect.stringContaining("SET assigned_to_user_id = ?"),
-      [null, "call-1"],
+      [null, null, null, "call-1"],
     );
-    expect(harness.repositoryMocks.writeCallEvent.mock.calls[0]![4]).toStrictEqual({
-      assignedToUserId: null,
-    });
+    expect(harness.directNotificationPublisher).toHaveBeenCalledWith(expect.objectContaining({
+      userIds: ["agent-old"],
+      type: "call.unassigned",
+      entityId: "call-1",
+      entityLabel: "CAG-20260713-090807-ABCDEF",
+    }));
     expect(harness.auditWriter).toHaveBeenCalledWith(expect.objectContaining({
       action: "call.assign",
-      metadata: { assignedToUserId: null },
+      metadata: expect.objectContaining({
+        previousAssignedToUserId: "agent-old",
+        assignedToUserId: null,
+      }),
     }));
     expect(response.json).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it("notifies both sides on reassignment and suppresses the acting user's own notification", async () => {
+    const harness = createControllerHarness();
+    harness.repositoryMocks.getCallById.mockResolvedValueOnce(createCallRow({
+      assigned_to_user_id: "agent-old",
+      assigned_to_name: "Old Agent",
+    }));
+    harness.query.mockResolvedValueOnce([[{
+      id: "agent-new",
+      full_name: "New Agent",
+      username: "new.agent",
+    }], []]);
+    const response = createControllerResponse();
+
+    await harness.controller.assignCall(createControllerRequest({
+      params: { id: "call-1" },
+      body: { assignedToUserId: "agent-new" },
+      userId: "manager-1",
+      permissions: ["calls.view.all"],
+    }), response);
+
+    expect(harness.directNotificationPublisher).toHaveBeenCalledTimes(2);
+    expect(harness.directNotificationPublisher).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      userIds: ["agent-new"],
+      type: "call.assigned",
+    }));
+    expect(harness.directNotificationPublisher).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      userIds: ["agent-old"],
+      type: "call.reassigned",
+    }));
+
+    harness.directNotificationPublisher.mockClear();
+    harness.repositoryMocks.getCallById.mockResolvedValueOnce(createCallRow({
+      assigned_to_user_id: null,
+      assigned_to_name: null,
+    }));
+    harness.query.mockResolvedValueOnce([[{
+      id: "manager-1",
+      full_name: "Manager",
+      username: "manager",
+    }], []]);
+
+    await harness.controller.assignCall(createControllerRequest({
+      params: { id: "call-1" },
+      body: { assignedToUserId: "manager-1" },
+      userId: "manager-1",
+      permissions: ["calls.view.all"],
+    }), createControllerResponse());
+
+    expect(harness.directNotificationPublisher).not.toHaveBeenCalled();
   });
 
   it("rejects empty and resolved status selections", async () => {

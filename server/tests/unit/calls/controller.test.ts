@@ -41,6 +41,7 @@ function createDependencies(input: {
   repository: CallRepository;
   auditWriter?: CallControllerDependencies["auditWriter"];
   notificationPublisher?: CallControllerDependencies["notificationPublisher"];
+  directNotificationPublisher?: CallControllerDependencies["directNotificationPublisher"];
   notificationSettingsReader?: CallControllerDependencies["notificationSettingsReader"];
   idGenerator?: CallControllerDependencies["idGenerator"];
 }) {
@@ -48,6 +49,7 @@ function createDependencies(input: {
     repository: input.repository,
     auditWriter: input.auditWriter ?? vi.fn(),
     notificationPublisher: input.notificationPublisher ?? vi.fn(),
+    directNotificationPublisher: input.directNotificationPublisher ?? vi.fn(),
     notificationSettingsReader: input.notificationSettingsReader
       ?? vi.fn().mockResolvedValue({ urgentNotificationEnabled: false }),
     clientIpReader: vi.fn(() => "127.0.0.1"),
@@ -169,6 +171,7 @@ describe("call controller orchestration", () => {
       "Issue",
       null,
       "urgent",
+      "open",
       0,
       null,
       "user-1",

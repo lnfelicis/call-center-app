@@ -16,12 +16,18 @@ import type { AppNotification, RequestFn } from "@/types"
 
 type NotificationsModuleProps = {
   request: RequestFn
+  onMarkAsRead: (notification: AppNotification) => Promise<void>
+  onOpenNotification: (notification: AppNotification) => Promise<void>
+  onRefreshSummary: () => Promise<void>
 }
 
 const notificationTypeLabels: Record<string, string> = {
   "call.urgent": "Acil çağrı",
   "call.follow_up_due": "Takip zamanı gelen çağrı",
   "call.stale": "Çözüm bekleyen çağrı",
+  "call.assigned": "Yeni çağrı ataması",
+  "call.reassigned": "Devredilen çağrı",
+  "call.unassigned": "Kaldırılan çağrı ataması",
 }
 
 const entityLabels: Record<string, string> = {
@@ -31,7 +37,12 @@ const entityLabels: Record<string, string> = {
   notification: "Bildirim",
 }
 
-export function NotificationsModule({ request }: NotificationsModuleProps) {
+export function NotificationsModule({
+  request,
+  onMarkAsRead,
+  onOpenNotification,
+  onRefreshSummary,
+}: NotificationsModuleProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -45,28 +56,33 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
     try {
       const data = await request<{ notifications: AppNotification[] }>("/notifications")
       setNotifications(data.notifications)
+      void onRefreshSummary().catch(() => undefined)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Bildirimler yüklenemedi.")
     } finally {
       setIsLoading(false)
     }
-  }, [request])
+  }, [onRefreshSummary, request])
 
   useEffect(() => {
     void loadNotifications()
   }, [loadNotifications])
 
-  const markAsRead = useCallback(async (notificationId: string) => {
+  const markAsRead = useCallback(async (notification: AppNotification) => {
+    if (notification.isRead) {
+      return
+    }
+
     setIsLoading(true)
     setMessage("")
 
     try {
-      await request(`/notifications/${notificationId}/read`, { method: "PATCH" })
+      await onMarkAsRead(notification)
       setNotifications((current) =>
-        current.map((notification) =>
-          notification.id === notificationId
-            ? { ...notification, isRead: true, readAt: new Date().toISOString() }
-            : notification,
+        current.map((item) =>
+          item.id === notification.id
+            ? { ...item, isRead: true, readAt: new Date().toISOString() }
+            : item,
         ),
       )
     } catch (error) {
@@ -74,7 +90,25 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [request])
+  }, [onMarkAsRead])
+
+  const openNotification = useCallback(async (notification: AppNotification) => {
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      await onOpenNotification(notification)
+      setNotifications((current) => current.map((item) =>
+        item.id === notification.id
+          ? { ...item, isRead: true, readAt: item.readAt ?? new Date().toISOString() }
+          : item,
+      ))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bildirim açılamadı.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [onOpenNotification])
 
   const columns = useMemo<Array<DataTableColumn<AppNotification>>>(
     () => [
@@ -112,7 +146,11 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
         id: "entity",
         header: "Kayıt",
         size: 160,
-        cell: (notification) => formatEntity(notification),
+        cell: (notification) => notification.entityType === "call" && notification.entityId ? (
+          <Button type="button" variant="link" className="h-auto justify-start p-0" onClick={() => void openNotification(notification)}>
+            {formatEntity(notification)}
+          </Button>
+        ) : formatEntity(notification),
         accessor: (notification) => `${notification.entityType ?? ""} ${notification.entityLabel ?? ""}`,
       },
       {
@@ -131,14 +169,14 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
           notification.isRead ? (
             <span className="text-xs text-muted-foreground">Tamam</span>
           ) : (
-            <Button type="button" size="sm" variant="outline" onClick={() => void markAsRead(notification.id)}>
+            <Button type="button" size="sm" variant="outline" onClick={() => void markAsRead(notification)}>
               <CheckCheck />
               Okundu
             </Button>
           ),
       },
     ],
-    [markAsRead],
+    [markAsRead, openNotification],
   )
 
   return (
@@ -152,7 +190,7 @@ export function NotificationsModule({ request }: NotificationsModuleProps) {
               <Bell className="size-5" />
               Bildirimler
             </CardTitle>
-            <CardDescription>Takip, acil kayıt ve çözüm süresi bildirimleri burada görünür.</CardDescription>
+            <CardDescription>Atama, takip, acil kayıt ve çözüm süresi bildirimleri burada görünür.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={unreadCount > 0 ? "default" : "secondary"}>{unreadCount} okunmamış</Badge>

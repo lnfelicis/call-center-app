@@ -116,6 +116,17 @@ export type NotificationPublisher = (
   },
 ) => Promise<void>;
 
+export type DirectNotificationPublisher = (notification: {
+  userIds: string[];
+  title: string;
+  message: string;
+  type: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  entityLabel?: string | null;
+  dedupeKey?: string | null;
+}) => Promise<void>;
+
 export type NotificationSettingsReader = (key: "notification_settings") => Promise<{
   urgentNotificationEnabled: boolean;
 }>;

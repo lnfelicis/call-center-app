@@ -128,21 +128,35 @@ describe("NotificationRepository", () => {
     ];
     const { query, repository } = createRepository(
       [notificationRows, []],
+      [notificationRows, []],
+      [[{ total: 4 }], []],
       [{ affectedRows: 1 } as ResultSetHeader, []],
     );
 
     await expect(repository.listPanelNotifications("user-id")).resolves.toStrictEqual(
       notificationRows,
     );
+    await expect(repository.listRecentPanelNotifications("user-id", 5)).resolves.toStrictEqual(
+      notificationRows,
+    );
+    await expect(repository.countUnreadPanelNotifications("user-id")).resolves.toBe(4);
     await expect(repository.markRead("notification-id", "user-id")).resolves.toBe(1);
 
     expect(compactSql(query.mock.calls[0]?.[0])).toBe(
-      "SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at FROM notifications WHERE user_id = ? AND channel = 'panel' ORDER BY is_read ASC, created_at DESC LIMIT 100",
+      "SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at FROM notifications WHERE user_id = ? AND channel = 'panel' ORDER BY is_read ASC, created_at DESC LIMIT ?",
     );
-    expect(query.mock.calls[0]?.[1]).toStrictEqual(["user-id"]);
+    expect(query.mock.calls[0]?.[1]).toStrictEqual(["user-id", 100]);
     expect(compactSql(query.mock.calls[1]?.[0])).toBe(
+      "SELECT id, title, message, notification_type, channel, entity_type, entity_id, entity_label, is_read, read_at, created_at FROM notifications WHERE user_id = ? AND channel = 'panel' ORDER BY created_at DESC LIMIT ?",
+    );
+    expect(query.mock.calls[1]?.[1]).toStrictEqual(["user-id", 5]);
+    expect(compactSql(query.mock.calls[2]?.[0])).toBe(
+      "SELECT COUNT(*) AS total FROM notifications WHERE user_id = ? AND channel = 'panel' AND is_read = 0",
+    );
+    expect(query.mock.calls[2]?.[1]).toStrictEqual(["user-id"]);
+    expect(compactSql(query.mock.calls[3]?.[0])).toBe(
       "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ?",
     );
-    expect(query.mock.calls[1]?.[1]).toStrictEqual(["notification-id", "user-id"]);
+    expect(query.mock.calls[3]?.[1]).toStrictEqual(["notification-id", "user-id"]);
   });
 });

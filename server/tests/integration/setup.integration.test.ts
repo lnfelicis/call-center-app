@@ -174,7 +174,7 @@ describe.skipIf(!enabled)("API integration against a dedicated MySQL _test schem
     expect(publicLogin.text).toBe(
       '{"message":"Kullanıcı adı ve şifre zorunludur."}',
     );
-    expect(protectedApiEndpoints).toHaveLength(45);
+    expect(protectedApiEndpoints).toHaveLength(46);
 
     for (const endpoint of protectedApiEndpoints) {
       const response = await sendWithoutAuthentication(endpoint.method, endpoint.path);

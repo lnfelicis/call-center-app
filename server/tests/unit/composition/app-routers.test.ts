@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => {
   const requireAnyPermission = vi.fn();
   const appSettingsRead = vi.fn();
   const notifyUsersWithAnyPermission = vi.fn();
+  const createNotifications = vi.fn();
 
   return {
     auditWriter,
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => {
     requireAnyPermission,
     appSettingsRead,
     notifyUsersWithAnyPermission,
+    createNotifications,
     appSettingsRepository: vi.fn(),
     appSettingsService: vi.fn(),
     auditRepository: vi.fn(),
@@ -113,6 +115,7 @@ vi.mock("../../../src/modules/notifications/repository.js", () => ({
 vi.mock("../../../src/modules/notifications/service.js", () => ({
   NotificationService: class {
     notifyUsersWithAnyPermission = mocks.notifyUsersWithAnyPermission;
+    createNotifications = mocks.createNotifications;
 
     constructor(dependencies: unknown) {
       mocks.notificationService(dependencies);

@@ -16,6 +16,11 @@ export function createNotificationRoutes(dependencies: NotificationRoutesDepende
     dependencies.authorize("notifications.view"),
     dependencies.controller.list,
   );
+  routes.get(
+    "/notifications/summary",
+    dependencies.authorize("notifications.view"),
+    dependencies.controller.summary,
+  );
   routes.patch(
     "/notifications/:id/read",
     dependencies.authorize("notifications.view"),

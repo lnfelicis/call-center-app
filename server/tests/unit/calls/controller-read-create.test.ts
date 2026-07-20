@@ -12,6 +12,35 @@ import {
 } from "./controller-harness.js";
 
 describe("call controller listing and creation", () => {
+  it("notifies a different user selected during call creation", async () => {
+    const harness = createControllerHarness();
+    harness.query
+      .mockResolvedValueOnce([[{
+        id: "agent-2",
+        full_name: "Agent Two",
+        username: "agent.two",
+      }], []])
+      .mockResolvedValueOnce([{}, []]);
+    const response = createControllerResponse();
+
+    await harness.controller.createCall(createControllerRequest({
+      body: {
+        interactionType: "phone",
+        category: "general",
+        issue: "Issue",
+        assignedToUserId: "agent-2",
+      },
+      permissions: ["calls.assign"],
+      userId: "manager-1",
+    }), response);
+
+    expect(harness.directNotificationPublisher).toHaveBeenCalledWith(expect.objectContaining({
+      userIds: ["agent-2"],
+      type: "call.assigned",
+      entityLabel: "CAG-20260713-090807-GENERA",
+    }));
+  });
+
   it("lists all calls without a visibility WHERE and preserves response mapping", async () => {
     const harness = createControllerHarness();
     harness.query.mockResolvedValueOnce([[createCallRow({ needs_follow_up: 1 })], []]);
@@ -136,6 +165,7 @@ describe("call controller listing and creation", () => {
       "Issue",
       null,
       "normal",
+      "open",
       0,
       null,
       "user-1",

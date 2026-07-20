@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, Loader2, Monitor, Moon, Sun } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-sidebar";
@@ -20,13 +21,15 @@ import { CallsModule } from "@/features/calls/calls-module";
 import { DashboardModule } from "@/features/dashboard/dashboard-module";
 import { LogsModule } from "@/features/logs/logs-module";
 import { NotificationsModule } from "@/features/notifications/notifications-module";
+import { NotificationCenter } from "@/features/notifications/notification-center";
+import { useNotificationCenter } from "@/features/notifications/use-notification-center";
 import { ReportsModule } from "@/features/reports/reports-module";
 import { RolesModule } from "@/features/roles/roles-module";
 import { SettingsModule } from "@/features/settings/settings-module";
 import { UsersModule } from "@/features/users/users-module";
 import { useAdminPanel } from "@/hooks/use-admin-panel";
 import { useTheme } from "@/hooks/use-theme";
-import type { ModuleId, ThemeMode } from "@/types";
+import type { AppNotification, ModuleId, ThemeMode } from "@/types";
 
 const themeOptions: Array<{
   mode: ThemeMode;
@@ -41,6 +44,24 @@ const themeOptions: Array<{
 export function AppShell() {
   const panel = useAdminPanel();
   const theme = useTheme();
+  const [requestedCallId, setRequestedCallId] = useState<string | null>(null);
+  const canViewNotifications = panel.currentUser?.permissions.includes("notifications.view") ?? false;
+  const notificationCenter = useNotificationCenter({
+    request: panel.request,
+    enabled: Boolean(panel.isAuthenticated && canViewNotifications),
+  });
+
+  async function openNotification(notification: AppNotification) {
+    await notificationCenter.markAsRead(notification);
+
+    if (notification.entityType === "call" && notification.entityId) {
+      setRequestedCallId(notification.entityId);
+      panel.setActiveModule("calls");
+      return;
+    }
+
+    panel.setActiveModule("notifications");
+  }
 
   if (panel.isSessionRestoring) {
     return <SessionRestoreScreen />;
@@ -90,10 +111,20 @@ export function AppShell() {
               {panel.message}
             </Badge>
           )}
-          <ThemeSwitcher
-            themeMode={theme.themeMode}
-            onThemeModeChange={theme.setThemeMode}
-          />
+          <div className="flex items-center gap-2">
+            {canViewNotifications && (
+              <NotificationCenter
+                notifications={notificationCenter.notifications}
+                unreadCount={notificationCenter.unreadCount}
+                onNotificationClick={(notification) => void openNotification(notification).catch(() => undefined)}
+                onViewAll={() => panel.setActiveModule("notifications")}
+              />
+            )}
+            <ThemeSwitcher
+              themeMode={theme.themeMode}
+              onThemeModeChange={theme.setThemeMode}
+            />
+          </div>
         </header>
 
         <main className="min-w-0 p-4 md:p-7">
@@ -149,6 +180,8 @@ export function AppShell() {
             <CallsModule
               currentUser={panel.currentUser}
               request={panel.request}
+              requestedCallId={requestedCallId}
+              onRequestedCallHandled={() => setRequestedCallId(null)}
             />
           )}
 
@@ -166,7 +199,12 @@ export function AppShell() {
           )}
 
           {panel.activeModule === "notifications" && (
-            <NotificationsModule request={panel.request} />
+            <NotificationsModule
+              request={panel.request}
+              onMarkAsRead={notificationCenter.markAsRead}
+              onOpenNotification={openNotification}
+              onRefreshSummary={notificationCenter.refresh}
+            />
           )}
 
           {panel.activeModule === "settings" && (

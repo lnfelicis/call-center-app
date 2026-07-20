@@ -111,6 +111,16 @@ export class NotificationService {
     return this.dependencies.repository.listPanelNotifications(userId);
   }
 
+  async getPanelSummary(userId: string | undefined) {
+    await this.generateOperationalNotifications();
+    const [notifications, unreadCount] = await Promise.all([
+      this.dependencies.repository.listRecentPanelNotifications(userId, 5),
+      this.dependencies.repository.countUnreadPanelNotifications(userId),
+    ]);
+
+    return { notifications, unreadCount };
+  }
+
   markRead(notificationId: string, userId: string | undefined) {
     return this.dependencies.repository.markRead(notificationId, userId);
   }

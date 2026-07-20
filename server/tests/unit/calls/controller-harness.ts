@@ -91,6 +91,7 @@ export function createControllerHarness() {
   const dependencyMocks = {
     auditWriter: vi.fn(async () => undefined),
     notificationPublisher: vi.fn(async () => undefined),
+    directNotificationPublisher: vi.fn(async () => undefined),
     notificationSettingsReader: vi.fn(async () => ({ urgentNotificationEnabled: false })),
     clientIpReader: vi.fn(() => "127.0.0.1"),
     idGenerator: vi.fn(() => "generated-id"),

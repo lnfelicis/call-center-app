@@ -102,10 +102,16 @@ describe("call controller partial-write failure behavior", () => {
     const harness = createControllerHarness();
     const order: string[] = [];
     const failure = new Error("audit failed");
-    harness.query.mockImplementationOnce(async () => {
-      order.push("update");
-      return [{}, []];
-    });
+    harness.query
+      .mockResolvedValueOnce([[{
+        id: "user-2",
+        full_name: "User Two",
+        username: "user.two",
+      }], []])
+      .mockImplementationOnce(async () => {
+        order.push("update");
+        return [{}, []];
+      });
     harness.repositoryMocks.writeCallEvent.mockImplementationOnce(async () => {
       order.push("event");
     });
@@ -118,6 +124,7 @@ describe("call controller partial-write failure behavior", () => {
     await expect(harness.controller.assignCall(createControllerRequest({
       params: { id: "call-1" },
       body: { assignedToUserId: "user-2" },
+      permissions: ["calls.view.all"],
     }), response)).rejects.toBe(failure);
 
     expect(order).toStrictEqual(["update", "event", "audit"]);

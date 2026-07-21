@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  KeyRound,
   RefreshCw,
   Settings,
   ShieldCheck,
@@ -40,6 +41,7 @@ type AppSidebarProps = {
   onNavigate: (moduleId: ModuleId) => void;
   onRefresh: () => void;
   onLogout: () => void;
+  onChangePassword: () => void;
 };
 
 const navigation = [
@@ -122,6 +124,7 @@ export function AppSidebar({
   onNavigate,
   onRefresh,
   onLogout,
+  onChangePassword,
 }: AppSidebarProps) {
   const visibleNavigation = navigation.filter((item) => {
     if (item.id === "dashboard") {
@@ -217,6 +220,10 @@ export function AppSidebar({
         </div>
 
         <div className="grid gap-2 group-data-[collapsible=icon]:hidden">
+          <Button type="button" variant="outline" onClick={onChangePassword}>
+            <KeyRound data-icon="inline-start" />
+            Şifremi Değiştir
+          </Button>
           <Button
             type="button"
             variant="outline"

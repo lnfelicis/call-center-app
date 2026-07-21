@@ -104,6 +104,30 @@ export class UserController {
     res.json({ ok: true });
   };
 
+  changePassword = async (req: Request, res: Response) => {
+    const userId = String(req.params.id ?? "");
+    const currentPassword = String(req.body.currentPassword ?? "");
+    const newPassword = String(req.body.newPassword ?? "");
+
+    if (!userId || !newPassword) {
+      res.status(400).json({ message: "Yeni şifre zorunludur.", field: "newPassword" });
+      return;
+    }
+
+    const passwordErrors = this.dependencies.getPasswordValidationErrors(newPassword);
+    if (passwordErrors.length > 0) {
+      res.status(400).json({ message: passwordErrors.join(" "), field: "newPassword" });
+      return;
+    }
+
+    await this.dependencies.service.changePassword(req, {
+      userId,
+      currentPassword,
+      newPassword,
+    });
+    res.json({ ok: true });
+  };
+
   archive = async (req: Request, res: Response) => {
     const archived = await this.dependencies.service.archive(req, String(req.params.id ?? ""));
     if (!archived) {

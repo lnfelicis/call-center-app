@@ -15,6 +15,7 @@ function createService() {
     listAll: vi.fn().mockResolvedValue([{ id: "user-2" }]),
     create: vi.fn().mockResolvedValue("user-3"),
     update: vi.fn().mockResolvedValue(true),
+    changePassword: vi.fn().mockResolvedValue(undefined),
     archive: vi.fn().mockResolvedValue(true),
     restore: vi.fn().mockResolvedValue(true),
   } as unknown as UserService;
@@ -152,6 +153,53 @@ describe("user controller", () => {
     expect(response.json).toHaveBeenCalledWith({
       message: "Ad soyad, e-posta ve rol zorunludur.",
     });
+  });
+
+  it("validates and forwards password changes without logging password data", async () => {
+    const request = {
+      params: { id: "user-1" },
+      body: { currentPassword: "OldPass1!", newPassword: "NewValidPass1!" },
+    } as unknown as Request;
+    const response = createResponse();
+
+    await new UserController({ service, getPasswordValidationErrors }).changePassword(
+      request,
+      response,
+    );
+
+    expect(getPasswordValidationErrors).toHaveBeenCalledWith("NewValidPass1!");
+    expect(service.changePassword).toHaveBeenCalledWith(request, {
+      userId: "user-1",
+      currentPassword: "OldPass1!",
+      newPassword: "NewValidPass1!",
+    });
+    expect(response.json).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it("rejects missing or weak new passwords before the service", async () => {
+    const controller = new UserController({ service, getPasswordValidationErrors });
+    const missingResponse = createResponse();
+    await controller.changePassword(
+      { params: { id: "user-1" }, body: {} } as unknown as Request,
+      missingResponse,
+    );
+    expect(missingResponse.status).toHaveBeenCalledWith(400);
+    expect(missingResponse.json).toHaveBeenCalledWith({
+      message: "Yeni şifre zorunludur.",
+      field: "newPassword",
+    });
+
+    getPasswordValidationErrors.mockReturnValue(["Şifre zayıf."]);
+    const weakResponse = createResponse();
+    await controller.changePassword(
+      { params: { id: "user-1" }, body: { newPassword: "weak" } } as unknown as Request,
+      weakResponse,
+    );
+    expect(weakResponse.json).toHaveBeenCalledWith({
+      message: "Şifre zayıf.",
+      field: "newPassword",
+    });
+    expect(service.changePassword).not.toHaveBeenCalled();
   });
 
   it("returns 404 without changing the update response", async () => {

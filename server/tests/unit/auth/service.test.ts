@@ -2,10 +2,10 @@ import type { Request } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthRepository } from "../../../src/modules/auth/repository.js";
 import { AuthService, type AuthServiceDependencies } from "../../../src/modules/auth/service.js";
-import type { AuthUser } from "../../../src/modules/auth/types.js";
+import type { AuthSessionUser } from "../../../src/modules/auth/types.js";
 
 const request = {} as Request;
-const authUser: AuthUser = {
+const authUser: AuthSessionUser = {
   id: "user-1",
   username: "omer",
   fullName: "Ömer Test",
@@ -13,6 +13,7 @@ const authUser: AuthUser = {
   roleId: "role-1",
   roleName: "Yönetici",
   permissions: ["users.manage"],
+  sessionVersion: 4,
 };
 
 function createRepositoryFake() {
@@ -150,8 +151,20 @@ describe("auth service", () => {
       "audit",
       "token",
     ]);
-    expect(dependencies.signToken).toHaveBeenCalledWith("user-1", 37, "10.0.0.8");
-    expect(result).toStrictEqual({ type: "success", token: "signed-token", user: authUser });
+    expect(dependencies.signToken).toHaveBeenCalledWith("user-1", 37, "10.0.0.8", 4);
+    expect(result).toStrictEqual({
+      type: "success",
+      token: "signed-token",
+      user: {
+        id: "user-1",
+        username: "omer",
+        fullName: "Ömer Test",
+        email: "omer@example.test",
+        roleId: "role-1",
+        roleName: "Yönetici",
+        permissions: ["users.manage"],
+      },
+    });
   });
 
   it("does not audit or sign when the role becomes inactive", async () => {

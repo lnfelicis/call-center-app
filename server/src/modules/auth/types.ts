@@ -10,6 +10,10 @@ export type AuthUser = {
   permissions: string[];
 };
 
+export type AuthSessionUser = AuthUser & {
+  sessionVersion: number;
+};
+
 export type AuthenticatedRequest = Request & {
   user?: AuthUser;
 };

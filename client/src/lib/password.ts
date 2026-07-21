@@ -29,3 +29,23 @@ export const passwordRequirements = [
 export function isPasswordValid(password: string) {
   return passwordRequirements.every((requirement) => requirement.test(password))
 }
+
+export type PasswordFormValue = {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
+}
+
+export const emptyPasswordForm: PasswordFormValue = {
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+}
+
+export function passwordFormIsValid(value: PasswordFormValue, requireCurrentPassword: boolean) {
+  return Boolean(
+    (!requireCurrentPassword || value.currentPassword) &&
+      isPasswordValid(value.newPassword) &&
+      value.newPassword === value.confirmPassword,
+  )
+}

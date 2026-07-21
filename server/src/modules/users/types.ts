@@ -56,3 +56,13 @@ export type UpdateUserInput = {
   status: UserStatus;
   permissionOverrides?: PermissionOverride[];
 };
+
+export type ChangePasswordInput = {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+};
+
+export type PasswordCredential = {
+  passwordHash: string;
+};

@@ -32,6 +32,7 @@ const authUser: AuthUser = {
   roleName: "Yönetici",
   permissions: ["users.manage", "logs.view"],
 };
+const authSessionUser = { ...authUser, sessionVersion: 0 };
 
 describe("auth middleware", () => {
   let next: NextFunction;
@@ -131,16 +132,38 @@ describe("auth middleware", () => {
         ipAllowlist: [],
       }),
       isSessionIpAllowed: vi.fn().mockReturnValue(true),
-      getUserWithPermissions: vi.fn().mockResolvedValue(authUser),
+      getUserWithPermissions: vi.fn().mockResolvedValue(authSessionUser),
     });
     const request = createRequest("Bearer token");
     const response = createResponse();
 
     await middleware(request, response, next);
 
-    expect(request.user).toBe(authUser);
+    expect(request.user).toStrictEqual(authUser);
     expect(next).toHaveBeenCalledOnce();
     expect(response.status).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token whose session version is stale", async () => {
+    const middleware = createRequireAuth({
+      verifyToken: vi.fn().mockReturnValue({ sub: "user-1", exp: 1, sv: 2 }),
+      readSecuritySettings: vi.fn().mockResolvedValue({
+        failedLoginLimit: 5,
+        sessionDurationMinutes: 480,
+        ipAllowlist: [],
+      }),
+      isSessionIpAllowed: vi.fn().mockReturnValue(true),
+      getUserWithPermissions: vi.fn().mockResolvedValue({ ...authUser, sessionVersion: 3 }),
+    });
+    const response = createResponse();
+
+    await middleware(createRequest("Bearer token"), response, next);
+
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith({
+      message: "Oturumunuz geçersiz kılındı. Lütfen tekrar giriş yapın.",
+    });
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("keeps exact 403 behavior for single and OR permission middleware", () => {

@@ -23,7 +23,12 @@ export type AuthServiceDependencies = {
   getClientIp: (req: Request) => string | null;
   isClientIpAllowed: (req: Request, ipAllowlist: string[]) => boolean;
   verifyPassword: (password: string, storedHash: string) => Promise<boolean>;
-  signToken: (userId: string, durationMinutes?: number, loginIp?: string) => string;
+  signToken: (
+    userId: string,
+    durationMinutes?: number,
+    loginIp?: string,
+    sessionVersion?: number,
+  ) => string;
   writeAuditLog: AuditWriter;
 };
 
@@ -64,11 +69,13 @@ export class AuthService {
 
     await this.dependencies.repository.recordSuccessfulLogin(user.id);
 
-    const authUser = await this.dependencies.repository.getUserWithPermissions(user.id);
+    const authSessionUser = await this.dependencies.repository.getUserWithPermissions(user.id);
 
-    if (!authUser) {
+    if (!authSessionUser) {
       return { type: "inactive-role" };
     }
+
+    const { sessionVersion, ...authUser } = authSessionUser;
 
     await this.dependencies.writeAuditLog({
       req,
@@ -83,6 +90,7 @@ export class AuthService {
         user.id,
         securitySettings.sessionDurationMinutes,
         requestIp,
+        sessionVersion,
       ),
       user: authUser,
     };

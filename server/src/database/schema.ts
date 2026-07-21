@@ -35,6 +35,7 @@ export const schemaStatements = [
     role_id CHAR(36) NOT NULL,
     status ENUM('active', 'passive') NOT NULL DEFAULT 'active',
     failed_login_attempts INT NOT NULL DEFAULT 0,
+    session_version INT UNSIGNED NOT NULL DEFAULT 0,
     last_login_at TIMESTAMP NULL,
     archived_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

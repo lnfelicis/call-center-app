@@ -2,6 +2,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { Pool } from "mysql2/promise";
 import type {
   CreateUserInput,
+  PasswordCredential,
   PermissionOverride,
   UpdateUserInput,
   UserRow,
@@ -89,6 +90,25 @@ export class UserRepository {
       permissionIds,
     );
     return rows.length === permissionIds.length;
+  }
+
+  async getPasswordCredential(userId: string): Promise<PasswordCredential | null> {
+    const [rows] = await this.database.query<Array<RowDataPacket & { password_hash: string }>>(
+      "SELECT password_hash FROM users WHERE id = ? AND archived_at IS NULL",
+      [userId],
+    );
+    const row = rows[0];
+    return row ? { passwordHash: row.password_hash } : null;
+  }
+
+  async updatePassword(userId: string, passwordHash: string) {
+    const [result] = await this.database.query<ResultSetHeader>(
+      `UPDATE users
+      SET password_hash = ?, failed_login_attempts = 0, session_version = session_version + 1
+      WHERE id = ? AND archived_at IS NULL`,
+      [passwordHash, userId],
+    );
+    return result.affectedRows;
   }
 
   async create(userId: string, input: CreateUserInput, passwordHash: string) {

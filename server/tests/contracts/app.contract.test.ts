@@ -26,7 +26,7 @@ function createTestApp(trustProxy = false) {
 }
 
 describe("HTTP contract", () => {
-  it("locks all 47 registered method/path pairs in mount order", () => {
+  it("locks all 48 registered method/path pairs in mount order", () => {
     type RouteLayer = {
       route?: {
         path: string;
@@ -60,7 +60,7 @@ describe("HTTP contract", () => {
     );
 
     expect(actual).toStrictEqual(apiRouteManifest);
-    expect(actual).toHaveLength(47);
+    expect(actual).toHaveLength(48);
   });
 
   it("keeps health response status, body, and key order", async () => {
@@ -161,7 +161,7 @@ describe("HTTP contract", () => {
     },
   );
 
-  it("locks all 46 protected API endpoints in the request matrix", () => {
-    expect(protectedApiEndpoints).toHaveLength(46);
+  it("locks all 47 protected API endpoints in the request matrix", () => {
+    expect(protectedApiEndpoints).toHaveLength(47);
   });
 });

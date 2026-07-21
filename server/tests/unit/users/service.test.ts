@@ -21,6 +21,8 @@ function createRepositoryFake() {
     permissionIdsExist: vi.fn().mockResolvedValue(true),
     create: vi.fn().mockResolvedValue(undefined),
     update: vi.fn().mockResolvedValue({ affectedRows: 1, roleChanged: false }),
+    getPasswordCredential: vi.fn().mockResolvedValue({ passwordHash: "stored-hash" }),
+    updatePassword: vi.fn().mockResolvedValue(1),
     archive: vi.fn().mockResolvedValue(1),
     restore: vi.fn().mockResolvedValue(1),
   } as unknown as UserRepository;
@@ -36,6 +38,7 @@ describe("user service", () => {
       repository,
       idGenerator: vi.fn().mockReturnValue("user-1"),
       hashPassword: vi.fn().mockResolvedValue("password-hash"),
+      verifyPassword: vi.fn().mockResolvedValue(false),
       writeAuditLog: vi.fn().mockResolvedValue(undefined),
     };
   });
@@ -155,6 +158,97 @@ describe("user service", () => {
       permissionOverrides: [{ permissionId: "logs.view", effect: "deny" }],
     })).rejects.toMatchObject({ status: 400 });
     expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it("changes the current user's password after verifying the existing password", async () => {
+    const passwordRequest = {
+      user: { id: "user-1", permissions: [] },
+    } as unknown as Request;
+    vi.mocked(dependencies.verifyPassword)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await new UserService(dependencies).changePassword(passwordRequest, {
+      userId: "user-1",
+      currentPassword: "OldPass1!",
+      newPassword: "NewValidPass1!",
+    });
+
+    expect(dependencies.verifyPassword).toHaveBeenNthCalledWith(1, "OldPass1!", "stored-hash");
+    expect(dependencies.verifyPassword).toHaveBeenNthCalledWith(2, "NewValidPass1!", "stored-hash");
+    expect(repository.updatePassword).toHaveBeenCalledWith("user-1", "password-hash");
+    expect(dependencies.writeAuditLog).toHaveBeenCalledWith({
+      req: passwordRequest,
+      action: "user.password.change",
+      entityType: "user",
+      entityId: "user-1",
+      metadata: {},
+    });
+  });
+
+  it("rejects a wrong current password without updating", async () => {
+    const passwordRequest = {
+      user: { id: "user-1", permissions: [] },
+    } as unknown as Request;
+
+    await expect(new UserService(dependencies).changePassword(passwordRequest, {
+      userId: "user-1",
+      currentPassword: "WrongPass1!",
+      newPassword: "NewValidPass1!",
+    })).rejects.toMatchObject({
+      status: 400,
+      body: { message: "Mevcut şifre hatalı.", field: "currentPassword" },
+    });
+    expect(repository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it("lets users.manage reset another user and writes a reset audit", async () => {
+    const passwordRequest = {
+      user: { id: "manager-1", permissions: ["users.manage"] },
+    } as unknown as Request;
+
+    await new UserService(dependencies).changePassword(passwordRequest, {
+      userId: "user-1",
+      currentPassword: "",
+      newPassword: "NewValidPass1!",
+    });
+
+    expect(dependencies.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      action: "user.password.reset",
+      entityId: "user-1",
+    }));
+  });
+
+  it("rejects unauthorized resets, super admin resets and reused passwords", async () => {
+    const service = new UserService(dependencies);
+    const regularRequest = {
+      user: { id: "actor-1", permissions: [] },
+    } as unknown as Request;
+    const managerRequest = {
+      user: { id: "manager-1", permissions: ["users.manage"] },
+    } as unknown as Request;
+
+    await expect(service.changePassword(regularRequest, {
+      userId: "user-1",
+      currentPassword: "",
+      newPassword: "NewValidPass1!",
+    })).rejects.toMatchObject({ status: 403 });
+    await expect(service.changePassword(managerRequest, {
+      userId: SUPER_ADMIN_USER_ID,
+      currentPassword: "",
+      newPassword: "NewValidPass1!",
+    })).rejects.toMatchObject({ status: 403 });
+
+    vi.mocked(dependencies.verifyPassword).mockResolvedValue(true);
+    await expect(service.changePassword(managerRequest, {
+      userId: "user-1",
+      currentPassword: "",
+      newPassword: "CurrentValid1!",
+    })).rejects.toMatchObject({
+      status: 400,
+      body: { message: "Yeni şifre mevcut şifreyle aynı olamaz.", field: "newPassword" },
+    });
+    expect(repository.updatePassword).not.toHaveBeenCalled();
   });
 
   it("archives a user and writes an audit entry", async () => {

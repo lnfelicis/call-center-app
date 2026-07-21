@@ -95,6 +95,7 @@ describe("setup orchestration", () => {
     );
     expect(serverEnd).toHaveBeenCalledOnce();
     expect(databaseQuery).toHaveBeenCalled();
+    expect(databaseQuery).toHaveBeenCalledWith(expect.stringContaining("session_version"));
     expect(databaseEnd).not.toHaveBeenCalled();
     expect(output.log).toHaveBeenCalledTimes(5);
   });

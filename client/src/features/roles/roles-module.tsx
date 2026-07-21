@@ -1,7 +1,8 @@
-import type { FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { Check, Plus } from "lucide-react"
 
 import { PermissionChecklist } from "@/components/permission-checklist"
+import { FormErrorAlert } from "@/components/form-error-alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { Permission, Role, RoleForm } from "@/types"
+import type { OperationResult, Permission, Role, RoleForm } from "@/types"
 
 type RolesModuleProps = {
   permissionsByGroup: Record<string, Permission[]>
@@ -31,10 +32,10 @@ type RolesModuleProps = {
   isLoading: boolean
   onRoleFormChange: (form: RoleForm) => void
   onSelectRole: (roleId: string) => void
-  onCreateRole: (event: FormEvent<HTMLFormElement>) => void
+  onCreateRole: (event: FormEvent<HTMLFormElement>) => Promise<OperationResult>
   onToggleNewRolePermission: (permissionId: string) => void
   onToggleSelectedRolePermission: (permissionId: string) => void
-  onSaveSelectedRolePermissions: () => void
+  onSaveSelectedRolePermissions: () => Promise<OperationResult>
 }
 
 export function RolesModule({
@@ -51,6 +52,8 @@ export function RolesModule({
   onToggleSelectedRolePermission,
   onSaveSelectedRolePermissions,
 }: RolesModuleProps) {
+  const [createError, setCreateError] = useState("")
+  const [permissionsError, setPermissionsError] = useState("")
   const roleCanBeCreated = roleForm.name.trim().length >= 2 && roleForm.permissions.length > 0
 
   return (
@@ -63,14 +66,25 @@ export function RolesModule({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4" onSubmit={onCreateRole}>
+          <form
+            className="grid gap-4"
+            onSubmit={async (event) => {
+              setCreateError("")
+              const result = await onCreateRole(event)
+              if (!result.ok) setCreateError(result.error.message)
+            }}
+          >
+            <FormErrorAlert message={createError} />
             <div className="grid gap-2">
               <Label htmlFor="role-name">Rol adı</Label>
               <Input
                 id="role-name"
                 placeholder="Örn. Personal Manager"
                 value={roleForm.name}
-                onChange={(event) => onRoleFormChange({ ...roleForm, name: event.target.value })}
+                onChange={(event) => {
+                  setCreateError("")
+                  onRoleFormChange({ ...roleForm, name: event.target.value })
+                }}
               />
             </div>
             <div className="grid gap-2">
@@ -109,9 +123,16 @@ export function RolesModule({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4">
+            <FormErrorAlert message={permissionsError} />
             <div className="grid gap-2">
               <Label htmlFor="selected-role">Rol</Label>
-              <Select value={selectedRoleId} onValueChange={onSelectRole}>
+              <Select
+                value={selectedRoleId}
+                onValueChange={(roleId) => {
+                  setPermissionsError("")
+                  onSelectRole(roleId)
+                }}
+              >
                 <SelectTrigger id="selected-role" className="w-full">
                   <SelectValue placeholder="Rol seçin" />
                 </SelectTrigger>
@@ -144,7 +165,11 @@ export function RolesModule({
                 />
                 <Button
                   type="button"
-                  onClick={onSaveSelectedRolePermissions}
+                  onClick={async () => {
+                    setPermissionsError("")
+                    const result = await onSaveSelectedRolePermissions()
+                    if (!result.ok) setPermissionsError(result.error.message)
+                  }}
                   disabled={isLoading || selectedRole.permissions.length === 0}
                 >
                   <Check />

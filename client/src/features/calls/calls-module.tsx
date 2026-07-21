@@ -1828,7 +1828,7 @@ export function CallsModule({
             detailTab === "summary" &&
             canEdit &&
             !selectedCall.isLocked && (
-              <DialogFooter>
+              <DialogFooter alignWithBody>
                 <Button
                   type="submit"
                   form="call-detail-edit-form"
@@ -2107,7 +2107,7 @@ export function CallsModule({
               </div>
             )}
             </DialogBody>
-            <DialogFooter>
+            <DialogFooter alignWithBody>
               <Button
                 type="button"
                 variant="outline"

@@ -115,7 +115,7 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-body"
       className={cn(
-        "min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]",
+        "-ml-1 min-h-0 flex-1 overflow-y-auto overscroll-contain *:pl-1 [scrollbar-gutter:stable]",
         className
       )}
       {...props}
@@ -125,10 +125,12 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
 
 function DialogFooter({
   className,
+  alignWithBody = false,
   showCloseButton = false,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
+  alignWithBody?: boolean
   showCloseButton?: boolean
 }) {
   return (
@@ -136,6 +138,7 @@ function DialogFooter({
       data-slot="dialog-footer"
       className={cn(
         "-mx-4 -mb-4 flex shrink-0 flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        alignWithBody && "pr-6",
         className
       )}
       {...props}

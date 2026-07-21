@@ -1,6 +1,6 @@
 import type { Pool } from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
-import type { AuthUser } from "./types.js";
+import type { AuthSessionUser } from "./types.js";
 
 export type AuthDatabase = Pick<Pool, "query">;
 
@@ -26,6 +26,7 @@ type UserPermissionRow = RowDataPacket & {
   role_id: string;
   role_name: string;
   permission_id: string | null;
+  session_version: number;
 };
 
 export class AuthRepository {
@@ -67,7 +68,7 @@ export class AuthRepository {
     );
   }
 
-  async getUserWithPermissions(userId: string): Promise<AuthUser | null> {
+  async getUserWithPermissions(userId: string): Promise<AuthSessionUser | null> {
     const [rows] = await this.database.query<UserPermissionRow[]>(
       `SELECT
         users.id,
@@ -76,6 +77,7 @@ export class AuthRepository {
         users.email,
         users.role_id,
         roles.name AS role_name,
+        users.session_version,
         effective_user_permissions.permission_id
       FROM users
       INNER JOIN roles ON roles.id = users.role_id
@@ -101,6 +103,7 @@ export class AuthRepository {
       roleId: first.role_id,
       roleName: first.role_name,
       permissions: rows.flatMap((row) => (row.permission_id ? [row.permission_id] : [])),
-    } satisfies AuthUser;
+      sessionVersion: first.session_version,
+    } satisfies AuthSessionUser;
   }
 }

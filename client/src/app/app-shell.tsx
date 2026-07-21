@@ -1,9 +1,14 @@
 import { useState } from "react";
-import { Check, Loader2, Monitor, Moon, Sun } from "lucide-react";
+import { Check, CircleAlert, Loader2, Monitor, Moon, RefreshCw, Sun } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { LoginScreen } from "@/components/login-screen";
-import { Badge } from "@/components/ui/badge";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+} from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,6 +50,7 @@ export function AppShell() {
   const panel = useAdminPanel();
   const theme = useTheme();
   const [requestedCallId, setRequestedCallId] = useState<string | null>(null);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const canViewNotifications = panel.currentUser?.permissions.includes("notifications.view") ?? false;
   const notificationCenter = useNotificationCenter({
     request: panel.request,
@@ -71,7 +77,7 @@ export function AppShell() {
     return (
       <LoginScreen
         form={panel.loginForm}
-        message={panel.message}
+        message={panel.authMessage}
         isLoading={panel.isLoading}
         onChange={panel.setLoginForm}
         onSubmit={panel.handleLogin}
@@ -91,6 +97,7 @@ export function AppShell() {
         onNavigate={panel.setActiveModule}
         onRefresh={() => void panel.loadPanelData()}
         onLogout={panel.handleLogout}
+        onChangePassword={() => setChangePasswordOpen(true)}
       />
 
       <SidebarInset className="min-w-0">
@@ -103,14 +110,6 @@ export function AppShell() {
               </h2>
             </div>
           </div>
-          {panel.message && (
-            <Badge
-              variant="secondary"
-              className="max-w-[48vw] whitespace-normal text-left"
-            >
-              {panel.message}
-            </Badge>
-          )}
           <div className="flex items-center gap-2">
             {canViewNotifications && (
               <NotificationCenter
@@ -128,6 +127,24 @@ export function AppShell() {
         </header>
 
         <main className="min-w-0 p-4 md:p-7">
+          {panel.panelError && (
+            <Alert variant="destructive" className="mb-4">
+              <CircleAlert />
+              <AlertDescription>{panel.panelError}</AlertDescription>
+              <AlertAction>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={panel.isLoading}
+                  onClick={() => void panel.loadPanelData()}
+                >
+                  <RefreshCw data-icon="inline-start" />
+                  Tekrar dene
+                </Button>
+              </AlertAction>
+            </Alert>
+          )}
           {panel.activeModule === "dashboard" && (
             <DashboardModule
               userPermissions={panel.currentUser.permissions}
@@ -149,6 +166,7 @@ export function AppShell() {
               onUserFormChange={panel.setUserForm}
               onCreateUser={panel.createUser}
               onUpdateUser={panel.updateUser}
+              onChangePassword={panel.changePassword}
               onArchiveUser={panel.archiveUser}
               onRestoreUser={panel.restoreUser}
               onRefresh={panel.loadPanelData}
@@ -170,9 +188,7 @@ export function AppShell() {
               onToggleSelectedRolePermission={
                 panel.toggleSelectedRolePermission
               }
-              onSaveSelectedRolePermissions={() =>
-                void panel.saveSelectedRolePermissions()
-              }
+              onSaveSelectedRolePermissions={panel.saveSelectedRolePermissions}
             />
           )}
 
@@ -212,6 +228,18 @@ export function AppShell() {
           )}
         </main>
       </SidebarInset>
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        targetName={panel.currentUser.fullName}
+        isLoading={panel.isLoading}
+        onOpenChange={setChangePasswordOpen}
+        onSubmit={(value) =>
+          panel.changePassword(panel.currentUser!.id, {
+            currentPassword: value.currentPassword,
+            newPassword: value.newPassword,
+          })
+        }
+      />
     </SidebarProvider>
   );
 }

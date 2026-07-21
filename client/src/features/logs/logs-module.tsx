@@ -26,6 +26,8 @@ const actionLabels: Record<string, string> = {
   "user.update": "Kullanıcı güncellendi",
   "user.archive": "Kullanıcı arşivlendi",
   "user.restore": "Kullanıcı geri yüklendi",
+  "user.password.change": "Kullanıcı şifresini değiştirdi",
+  "user.password.reset": "Kullanıcı şifresi sıfırlandı",
   "user.permission_overrides.update": "Kullanıcı izinleri güncellendi",
   "role.create": "Rol oluşturuldu",
   "role.update": "Rol güncellendi",
@@ -276,6 +278,14 @@ function describeLog(log: AuditLog) {
 
   if (log.action === "user.restore") {
     return "Kullanıcı yeniden etkin kayıtlara alındı."
+  }
+
+  if (log.action === "user.password.change") {
+    return "Kullanıcı kendi şifresini değiştirdi ve açık oturumları kapatıldı."
+  }
+
+  if (log.action === "user.password.reset") {
+    return "Kullanıcının şifresi yönetici tarafından sıfırlandı ve açık oturumları kapatıldı."
   }
 
   if (log.action === "role.permissions.update") {

@@ -72,6 +72,25 @@ describe("user repository", () => {
     );
   });
 
+  it("reads and updates password credentials while invalidating sessions", async () => {
+    const database = {
+      query: vi.fn()
+        .mockResolvedValueOnce([[{ password_hash: "stored-hash" }], []])
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []]),
+    } as unknown as UserDatabase;
+    const repository = new UserRepository(database);
+
+    await expect(repository.getPasswordCredential("user-1")).resolves.toStrictEqual({
+      passwordHash: "stored-hash",
+    });
+    await expect(repository.updatePassword("user-1", "new-hash")).resolves.toBe(1);
+    expect(database.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("session_version = session_version + 1"),
+      ["new-hash", "user-1"],
+    );
+  });
+
   it("creates the user and overrides in one transaction", async () => {
     const { database, connection } = transactionalDatabase([{}, []], [{}, []], [{}, []]);
     const input = {

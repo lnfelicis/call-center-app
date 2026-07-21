@@ -13,6 +13,7 @@ describe("user routes", () => {
       list: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      changePassword: vi.fn(),
       archive: vi.fn(),
       restore: vi.fn(),
     } as unknown as UserController;

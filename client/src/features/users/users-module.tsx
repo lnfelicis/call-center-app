@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
   Archive,
   Check,
   CircleCheck,
   CircleMinus,
+  KeyRound,
   RefreshCw,
   Trash2,
   UserPlus,
@@ -13,6 +14,10 @@ import {
 } from "lucide-react";
 
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import {
+  PasswordFields,
+} from "@/components/change-password-dialog";
+import { FormErrorAlert } from "@/components/form-error-alert";
 import { UserPermissionOverrides } from "@/components/user-permission-overrides";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -44,8 +49,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isPasswordValid, passwordRequirements } from "@/lib/password";
-import type { ManagedUser, Permission, Role, UserForm } from "@/types";
+import {
+  emptyPasswordForm,
+  isPasswordValid,
+  passwordFormIsValid,
+  passwordRequirements,
+  type PasswordFormValue,
+} from "@/lib/password";
+import type {
+  ManagedUser,
+  OperationError,
+  OperationResult,
+  Permission,
+  Role,
+  UserForm,
+} from "@/types";
 
 const superAdminUserId = "00000000-0000-4000-8000-000000000002";
 
@@ -57,16 +75,20 @@ type UsersModuleProps = {
   isLoading: boolean;
   currentUserId: string;
   onUserFormChange: (form: UserForm) => void;
-  onCreateUser: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  onCreateUser: (event: FormEvent<HTMLFormElement>) => Promise<OperationResult>;
   onUpdateUser: (
     userId: string,
     payload: Pick<
       ManagedUser,
       "fullName" | "email" | "roleId" | "status" | "permissionOverrides"
     >,
-  ) => Promise<boolean>;
-  onArchiveUser: (userId: string) => Promise<boolean>;
-  onRestoreUser: (userId: string) => Promise<boolean>;
+  ) => Promise<OperationResult>;
+  onChangePassword: (
+    userId: string,
+    payload: { currentPassword?: string; newPassword: string },
+  ) => Promise<OperationResult>;
+  onArchiveUser: (userId: string) => Promise<OperationResult>;
+  onRestoreUser: (userId: string) => Promise<OperationResult>;
   onRefresh: () => Promise<void>;
 };
 
@@ -82,6 +104,7 @@ export function UsersModule({
   onUserFormChange,
   onCreateUser,
   onUpdateUser,
+  onChangePassword,
   onArchiveUser,
   onRestoreUser,
   onRefresh,
@@ -92,6 +115,7 @@ export function UsersModule({
   const [archiveCandidate, setArchiveCandidate] = useState<ManagedUser | null>(
     null,
   );
+  const [archiveError, setArchiveError] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("current");
@@ -335,6 +359,8 @@ export function UsersModule({
         isLoading={isLoading}
         onUserChange={setEditingUser}
         onUpdateUser={onUpdateUser}
+        onChangePassword={onChangePassword}
+        currentUserId={currentUserId}
         canArchive={Boolean(
           editingUser &&
           editingUser.id !== superAdminUserId &&
@@ -342,6 +368,7 @@ export function UsersModule({
         )}
         onArchive={(user) => {
           setEditingUser(null);
+          setArchiveError("");
           setArchiveCandidate(user);
         }}
       />
@@ -355,7 +382,12 @@ export function UsersModule({
 
       <Dialog
         open={Boolean(archiveCandidate)}
-        onOpenChange={(open) => !open && setArchiveCandidate(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setArchiveCandidate(null);
+            setArchiveError("");
+          }
+        }}
       >
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
@@ -368,6 +400,7 @@ export function UsersModule({
               not ve denetim geçmişi korunacak.
             </DialogDescription>
           </DialogHeader>
+          <FormErrorAlert message={archiveError} />
           <DialogFooter>
             <Button
               type="button"
@@ -381,12 +414,12 @@ export function UsersModule({
               variant="destructive"
               disabled={isLoading}
               onClick={async () => {
-                if (
-                  archiveCandidate &&
-                  (await onArchiveUser(archiveCandidate.id))
-                ) {
+                if (!archiveCandidate) return;
+                setArchiveError("");
+                const result = await onArchiveUser(archiveCandidate.id);
+                if (result.ok) {
                   setArchiveCandidate(null);
-                }
+                } else setArchiveError(result.error.message);
               }}
             >
               <Trash2 data-icon="inline-start" />
@@ -479,8 +512,19 @@ function CreateUserDialog({
   isLoading: boolean;
   userCanBeCreated: boolean;
   onUserFormChange: (form: UserForm) => void;
-  onCreateUser: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  onCreateUser: (event: FormEvent<HTMLFormElement>) => Promise<OperationResult>;
 }) {
+  const [error, setError] = useState<OperationError | null>(null);
+
+  useEffect(() => {
+    if (!open) setError(null);
+  }, [open]);
+
+  const changeForm = (form: UserForm) => {
+    setError(null);
+    onUserFormChange(form);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col overflow-hidden sm:max-w-3xl">
@@ -493,9 +537,13 @@ function CreateUserDialog({
         <form
           className="flex min-h-0 flex-1 flex-col gap-4"
           onSubmit={async (event) => {
-            if (await onCreateUser(event)) onOpenChange(false);
+            setError(null);
+            const result = await onCreateUser(event);
+            if (result.ok) onOpenChange(false);
+            else setError(result.error);
           }}
         >
+          <FormErrorAlert message={error && !error.field ? error.message : undefined} />
           <DialogBody>
             <Tabs defaultValue="account">
               <TabsList className="w-full">
@@ -513,7 +561,7 @@ function CreateUserDialog({
                     label="Kullanıcı adı"
                     value={userForm.username}
                     onChange={(username) =>
-                      onUserFormChange({ ...userForm, username })
+                      changeForm({ ...userForm, username })
                     }
                   />
                   <TextField
@@ -521,7 +569,7 @@ function CreateUserDialog({
                     label="Ad soyad"
                     value={userForm.fullName}
                     onChange={(fullName) =>
-                      onUserFormChange({ ...userForm, fullName })
+                      changeForm({ ...userForm, fullName })
                     }
                   />
                   <TextField
@@ -530,7 +578,7 @@ function CreateUserDialog({
                     type="email"
                     value={userForm.email}
                     onChange={(email) =>
-                      onUserFormChange({ ...userForm, email })
+                      changeForm({ ...userForm, email })
                     }
                   />
                   <RoleField
@@ -538,26 +586,33 @@ function CreateUserDialog({
                     roles={roles}
                     value={userForm.roleId}
                     onChange={(roleId) =>
-                      onUserFormChange({
+                      changeForm({
                         ...userForm,
                         roleId,
                         permissionOverrides: [],
                       })
                     }
                   />
-                  <Field className="sm:col-span-2">
+                  <Field
+                    className="sm:col-span-2"
+                    data-invalid={error?.field === "password" || undefined}
+                  >
                     <FieldLabel htmlFor="new-password">Geçici şifre</FieldLabel>
                     <Input
                       id="new-password"
                       type="password"
+                      aria-invalid={error?.field === "password" || undefined}
                       value={userForm.password}
                       onChange={(event) =>
-                        onUserFormChange({
+                        changeForm({
                           ...userForm,
                           password: event.target.value,
                         })
                       }
                     />
+                    <FieldError>
+                      {error?.field === "password" ? error.message : undefined}
+                    </FieldError>
                     <div
                       className="flex flex-wrap gap-1.5"
                       aria-label="Şifre gereksinimleri"
@@ -590,13 +645,13 @@ function CreateUserDialog({
                   role={roles.find((role) => role.id === userForm.roleId)}
                   overrides={userForm.permissionOverrides}
                   onChange={(permissionOverrides) =>
-                    onUserFormChange({ ...userForm, permissionOverrides })
+                    changeForm({ ...userForm, permissionOverrides })
                   }
                 />
               </TabsContent>
             </Tabs>
           </DialogBody>
-          <DialogFooter>
+          <DialogFooter alignWithBody>
             <Button
               type="button"
               variant="outline"
@@ -622,6 +677,8 @@ function EditUserDialog({
   isLoading,
   onUserChange,
   onUpdateUser,
+  onChangePassword,
+  currentUserId,
   canArchive,
   onArchive,
 }: {
@@ -631,9 +688,26 @@ function EditUserDialog({
   isLoading: boolean;
   onUserChange: (user: ManagedUser | null) => void;
   onUpdateUser: UsersModuleProps["onUpdateUser"];
+  onChangePassword: UsersModuleProps["onChangePassword"];
+  currentUserId: string;
   canArchive: boolean;
   onArchive: (user: ManagedUser) => void;
 }) {
+  const [activeTab, setActiveTab] = useState("account");
+  const [passwordForm, setPasswordForm] = useState<PasswordFormValue>(emptyPasswordForm);
+  const [error, setError] = useState<OperationError | null>(null);
+  const isSelf = user?.id === currentUserId;
+  const passwordChangeAllowed = Boolean(
+    user && (user.id !== superAdminUserId || isSelf),
+  );
+  const passwordCanBeSaved = passwordFormIsValid(passwordForm, isSelf);
+
+  useEffect(() => {
+    setActiveTab("account");
+    setPasswordForm(emptyPasswordForm);
+    setError(null);
+  }, [user?.id]);
+
   return (
     <Dialog
       open={Boolean(user)}
@@ -651,18 +725,38 @@ function EditUserDialog({
             className="flex min-h-0 flex-1 flex-col gap-4"
             onSubmit={async (event) => {
               event.preventDefault();
-              const updated = await onUpdateUser(user.id, {
+              setError(null);
+              if (activeTab === "password") {
+                if (!passwordCanBeSaved) return;
+                const result = await onChangePassword(user.id, {
+                  ...(isSelf ? { currentPassword: passwordForm.currentPassword } : {}),
+                  newPassword: passwordForm.newPassword,
+                });
+                if (result.ok) onUserChange(null);
+                else setError(result.error);
+                return;
+              }
+
+              const result = await onUpdateUser(user.id, {
                 fullName: user.fullName,
                 email: user.email,
                 roleId: user.roleId,
                 status: user.status,
                 permissionOverrides: user.permissionOverrides,
               });
-              if (updated) onUserChange(null);
+              if (result.ok) onUserChange(null);
+              else setError(result.error);
             }}
           >
+            <FormErrorAlert message={error && !error.field ? error.message : undefined} />
             <DialogBody>
-              <Tabs defaultValue="account">
+              <Tabs
+                value={activeTab}
+                onValueChange={(tab) => {
+                  setError(null);
+                  setActiveTab(tab);
+                }}
+              >
                 <TabsList className="w-full">
                   <TabsTrigger className="flex-1" value="account">
                     Hesap ve rol
@@ -670,6 +764,11 @@ function EditUserDialog({
                   <TabsTrigger className="flex-1" value="permissions">
                     Özel yetkiler
                   </TabsTrigger>
+                  {passwordChangeAllowed && (
+                    <TabsTrigger className="flex-1" value="password">
+                      Şifre
+                    </TabsTrigger>
+                  )}
                 </TabsList>
                 <TabsContent value="account">
                   <FieldGroup className="grid gap-4 sm:grid-cols-2">
@@ -736,10 +835,27 @@ function EditUserDialog({
                     }
                   />
                 </TabsContent>
+                {passwordChangeAllowed && (
+                  <TabsContent value="password">
+                    <PasswordFields
+                      value={passwordForm}
+                      requireCurrentPassword={isSelf}
+                      errors={{
+                        currentPassword:
+                          error?.field === "currentPassword" ? error.message : undefined,
+                        newPassword: error?.field === "newPassword" ? error.message : undefined,
+                      }}
+                      onChange={(value) => {
+                        setError(null);
+                        setPasswordForm(value);
+                      }}
+                    />
+                  </TabsContent>
+                )}
               </Tabs>
             </DialogBody>
-            <DialogFooter>
-              {canArchive && (
+            <DialogFooter alignWithBody>
+              {canArchive && activeTab !== "password" && (
                 <Button
                   type="button"
                   variant="destructive"
@@ -757,8 +873,12 @@ function EditUserDialog({
               >
                 Vazgeç
               </Button>
-              <Button type="submit" disabled={isLoading}>
-                Kaydet
+              <Button
+                type="submit"
+                disabled={isLoading || (activeTab === "password" && !passwordCanBeSaved)}
+              >
+                {activeTab === "password" && <KeyRound data-icon="inline-start" />}
+                {activeTab === "password" ? "Şifreyi değiştir" : "Kaydet"}
               </Button>
             </DialogFooter>
           </form>
@@ -779,6 +899,12 @@ function ArchivedUserDialog({
   onUserChange: (user: ManagedUser | null) => void;
   onRestoreUser: UsersModuleProps["onRestoreUser"];
 }) {
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setError("");
+  }, [user?.id]);
+
   return (
     <Dialog
       open={Boolean(user)}
@@ -792,6 +918,7 @@ function ArchivedUserDialog({
             korunur.
           </DialogDescription>
         </DialogHeader>
+        <FormErrorAlert message={error} />
         {user && (
           <>
             <DialogBody>
@@ -837,7 +964,7 @@ function ArchivedUserDialog({
                 />
               </FieldGroup>
             </DialogBody>
-            <DialogFooter>
+            <DialogFooter alignWithBody>
               <Button
                 type="button"
                 variant="outline"
@@ -849,7 +976,10 @@ function ArchivedUserDialog({
                 type="button"
                 disabled={isLoading}
                 onClick={async () => {
-                  if (await onRestoreUser(user.id)) onUserChange(null);
+                  setError("");
+                  const result = await onRestoreUser(user.id);
+                  if (result.ok) onUserChange(null);
+                  else setError(result.error.message);
                 }}
               >
                 Geri yükle

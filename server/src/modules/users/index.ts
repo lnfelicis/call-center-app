@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
 import type { Database } from "../../database/database.js";
 import type { AuditWriter } from "../audit/types.js";
-import { getPasswordValidationErrors, hashPassword } from "../auth/security.js";
+import { getPasswordValidationErrors, hashPassword, verifyPassword } from "../auth/security.js";
 import { UserController } from "./controller.js";
 import { UserRepository } from "./repository.js";
 import { createUserRoutes } from "./routes.js";
@@ -22,6 +22,7 @@ export function createUserRouter(dependencies: UserModuleDependencies) {
     repository,
     idGenerator: dependencies.idGenerator,
     hashPassword,
+    verifyPassword,
     writeAuditLog: dependencies.auditWriter,
   });
   const controller = new UserController({ service, getPasswordValidationErrors });

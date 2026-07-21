@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 
 import { useToast } from "@/hooks/use-toast"
+import { ApiRequestError, toOperationError } from "@/lib/api-error"
 import { isPasswordValid } from "@/lib/password"
 import type {
   AuthUser,
@@ -47,7 +48,8 @@ export function useAdminPanel() {
   const [isSessionRestoring, setIsSessionRestoring] = useState(() =>
     Boolean(localStorage.getItem("call-center-token")),
   )
-  const [message, setMessage] = useState("")
+  const [authMessage, setAuthMessage] = useState("")
+  const [panelError, setPanelError] = useState("")
 
   const clearSession = useCallback((nextMessage = "") => {
     localStorage.removeItem("call-center-token")
@@ -57,7 +59,8 @@ export function useAdminPanel() {
     setRoles([])
     setUsers([])
     setIsSessionRestoring(false)
-    setMessage(nextMessage)
+    setAuthMessage(nextMessage)
+    setPanelError("")
   }, [])
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? roles[0]
@@ -79,14 +82,17 @@ export function useAdminPanel() {
         },
       })
 
-      const data = (await response.json().catch(() => ({}))) as { message?: string }
+      const data = (await response.json().catch(() => ({}))) as {
+        message?: string
+        field?: string
+      }
 
       if (response.status === 401 && token) {
         clearSession(data.message ?? "Oturumunuz sona erdi. Lütfen tekrar giriş yapın.")
       }
 
       if (!response.ok) {
-        throw new Error(data.message ?? "İşlem tamamlanamadı.")
+        throw new ApiRequestError(data.message ?? "İşlem tamamlanamadı.", data.field)
       }
 
       return data as T
@@ -102,7 +108,8 @@ export function useAdminPanel() {
       }
 
       setIsLoading(true)
-      setMessage("")
+      setPanelError("")
+      let identityLoaded = false
 
       try {
         const headers = { Authorization: `Bearer ${activeToken}` }
@@ -125,6 +132,9 @@ export function useAdminPanel() {
         if (meData.message) {
           throw new Error(meData.message)
         }
+
+        setCurrentUser(meData.user)
+        identityLoaded = true
 
         const userPermissions = (meData.user?.permissions ?? []) as string[]
         const canManageRoles = userPermissions.includes("roles.manage")
@@ -150,7 +160,6 @@ export function useAdminPanel() {
           throw new Error(permissionData.message ?? roleData.message ?? userData.message)
         }
 
-        setCurrentUser(meData.user)
         setPermissions(permissionData.permissions)
         setRoles(roleData.roles)
         setUsers(userData.users)
@@ -191,7 +200,9 @@ export function useAdminPanel() {
           return current
         })
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Veriler yüklenemedi.")
+        const errorMessage = error instanceof Error ? error.message : "Veriler yüklenemedi."
+        if (identityLoaded) setPanelError(errorMessage)
+        else setAuthMessage(errorMessage)
       } finally {
         setIsSessionRestoring(false)
         setIsLoading(false)
@@ -237,7 +248,7 @@ export function useAdminPanel() {
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsLoading(true)
-    setMessage("")
+    setAuthMessage("")
 
     try {
       const data = await fetch(`${apiBaseUrl}/auth/login`, {
@@ -253,9 +264,9 @@ export function useAdminPanel() {
       localStorage.setItem("call-center-token", data.token)
       setToken(data.token)
       setCurrentUser(data.user)
-      setMessage("Giriş başarılı.")
+      setAuthMessage("")
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Giriş yapılamadı.")
+      setAuthMessage(error instanceof Error ? error.message : "Giriş yapılamadı.")
     } finally {
       setIsLoading(false)
     }
@@ -280,12 +291,13 @@ export function useAdminPanel() {
   async function createRole(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsLoading(true)
-    setMessage("")
 
     if (roleForm.permissions.length === 0) {
-      setMessage("Rol oluşturmak için en az bir izin seçin.")
       setIsLoading(false)
-      return
+      return {
+        ok: false as const,
+        error: { message: "Rol oluşturmak için en az bir izin seçin." },
+      }
     }
 
     try {
@@ -294,11 +306,11 @@ export function useAdminPanel() {
         body: JSON.stringify(roleForm),
       })
       setRoleForm(emptyRoleForm)
-      setMessage("Rol oluşturuldu.")
       toast.success("Rol oluşturuldu.")
       await loadPanelData()
+      return { ok: true as const }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Rol oluşturulamadı.")
+      return { ok: false as const, error: toOperationError(error, "Rol oluşturulamadı.") }
     } finally {
       setIsLoading(false)
     }
@@ -306,27 +318,31 @@ export function useAdminPanel() {
 
   async function saveSelectedRolePermissions() {
     if (!selectedRole) {
-      return
+      return { ok: false as const, error: { message: "Rol seçilmedi." } }
     }
 
     if (selectedRole.permissions.length === 0) {
-      setMessage("Rol üzerinde en az bir izin kalmalıdır.")
-      return
+      return {
+        ok: false as const,
+        error: { message: "Rol üzerinde en az bir izin kalmalıdır." },
+      }
     }
 
     setIsLoading(true)
-    setMessage("")
 
     try {
       await request(`/roles/${selectedRole.id}/permissions`, {
         method: "PATCH",
         body: JSON.stringify({ permissions: selectedRole.permissions }),
       })
-      setMessage("Rol izinleri kaydedildi.")
       toast.success("İzinler kaydedildi.")
       await loadPanelData()
+      return { ok: true as const }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Rol izinleri kaydedilemedi.")
+      return {
+        ok: false as const,
+        error: toOperationError(error, "Rol izinleri kaydedilemedi."),
+      }
     } finally {
       setIsLoading(false)
     }
@@ -358,12 +374,16 @@ export function useAdminPanel() {
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsLoading(true)
-    setMessage("")
 
     if (!isPasswordValid(userForm.password)) {
-      setMessage("Şifre gereksinimleri karşılanmadan kullanıcı oluşturulamaz.")
       setIsLoading(false)
-      return false
+      return {
+        ok: false as const,
+        error: {
+          message: "Şifre gereksinimleri karşılanmadan kullanıcı oluşturulamaz.",
+          field: "password",
+        },
+      }
     }
 
     try {
@@ -372,13 +392,11 @@ export function useAdminPanel() {
         body: JSON.stringify(userForm),
       })
       setUserForm({ ...emptyUserForm, roleId: roles[0]?.id ?? "" })
-      setMessage("Kullanıcı oluşturuldu.")
       toast.success("Kullanıcı oluşturuldu.")
       await loadPanelData()
-      return true
+      return { ok: true as const }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Kullanıcı oluşturulamadı.")
-      return false
+      return { ok: false as const, error: toOperationError(error, "Kullanıcı oluşturulamadı.") }
     } finally {
       setIsLoading(false)
     }
@@ -392,20 +410,42 @@ export function useAdminPanel() {
     >,
   ) {
     setIsLoading(true)
-    setMessage("")
 
     try {
       await request(`/users/${userId}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
       })
-      setMessage("Kullanıcı güncellendi.")
       toast.success("Kullanıcı güncellendi.")
       await loadPanelData()
-      return true
+      return { ok: true as const }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Kullanıcı güncellenemedi.")
-      return false
+      return { ok: false as const, error: toOperationError(error, "Kullanıcı güncellenemedi.") }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function changePassword(
+    userId: string,
+    payload: { currentPassword?: string; newPassword: string },
+  ) {
+    setIsLoading(true)
+
+    try {
+      await request(`/users/${userId}/password`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      })
+
+      if (userId === currentUser?.id) {
+        clearSession("Şifreniz değiştirildi. Lütfen yeni şifrenizle tekrar giriş yapın.")
+      } else {
+        toast.success("Kullanıcının şifresi sıfırlandı.")
+      }
+      return { ok: true as const }
+    } catch (error) {
+      return { ok: false as const, error: toOperationError(error, "Şifre değiştirilemedi.") }
     } finally {
       setIsLoading(false)
     }
@@ -413,17 +453,14 @@ export function useAdminPanel() {
 
   async function archiveUser(userId: string) {
     setIsLoading(true)
-    setMessage("")
 
     try {
       await request(`/users/${userId}`, { method: "DELETE" })
-      setMessage("Kullanıcı silindi; geçmiş kayıtları korundu.")
       toast.success("Kullanıcı silindi.")
       await loadPanelData()
-      return true
+      return { ok: true as const }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Kullanıcı silinemedi.")
-      return false
+      return { ok: false as const, error: toOperationError(error, "Kullanıcı silinemedi.") }
     } finally {
       setIsLoading(false)
     }
@@ -431,17 +468,17 @@ export function useAdminPanel() {
 
   async function restoreUser(userId: string) {
     setIsLoading(true)
-    setMessage("")
 
     try {
       await request(`/users/${userId}/restore`, { method: "POST" })
-      setMessage("Kullanıcı geri yüklendi.")
       toast.success("Kullanıcı geri yüklendi.")
       await loadPanelData()
-      return true
+      return { ok: true as const }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Kullanıcı geri yüklenemedi.")
-      return false
+      return {
+        ok: false as const,
+        error: toOperationError(error, "Kullanıcı geri yüklenemedi."),
+      }
     } finally {
       setIsLoading(false)
     }
@@ -454,7 +491,8 @@ export function useAdminPanel() {
     isLoading,
     isSessionRestoring,
     loginForm,
-    message,
+    authMessage,
+    panelError,
     permissions,
     permissionsByGroup,
     request,
@@ -466,6 +504,7 @@ export function useAdminPanel() {
     createRole,
     createUser,
     updateUser,
+    changePassword,
     archiveUser,
     restoreUser,
     handleLogin,

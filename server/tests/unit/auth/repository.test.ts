@@ -64,6 +64,7 @@ describe("auth repository", () => {
         email: "omer@example.test",
         role_id: "role-1",
         role_name: "Yönetici",
+        session_version: 3,
         permission_id: "users.manage",
       },
       {
@@ -73,6 +74,7 @@ describe("auth repository", () => {
         email: "omer@example.test",
         role_id: "role-1",
         role_name: "Yönetici",
+        session_version: 3,
         permission_id: null,
       },
       {
@@ -82,6 +84,7 @@ describe("auth repository", () => {
         email: "omer@example.test",
         role_id: "role-1",
         role_name: "Yönetici",
+        session_version: 3,
         permission_id: "logs.view",
       },
     ]);
@@ -96,6 +99,7 @@ describe("auth repository", () => {
       roleId: "role-1",
       roleName: "Yönetici",
       permissions: ["users.manage", "logs.view"],
+      sessionVersion: 3,
     });
     expect(database.query).toHaveBeenCalledWith(
       expect.stringContaining(

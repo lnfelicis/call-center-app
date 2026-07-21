@@ -1,6 +1,6 @@
 import type { NextFunction, RequestHandler, Response } from "express";
 import { hasAnyPermission, hasPermission } from "./authorization-policy.js";
-import type { AuthenticatedRequest, AuthUser, SecuritySettings } from "./types.js";
+import type { AuthenticatedRequest, AuthSessionUser, SecuritySettings } from "./types.js";
 import type { AuthTokenPayload } from "./security.js";
 
 export type AuthMiddlewareDependencies = {
@@ -11,7 +11,7 @@ export type AuthMiddlewareDependencies = {
     ipAllowlist: string[],
     loginIp: string | undefined,
   ) => boolean;
-  getUserWithPermissions: (userId: string) => Promise<AuthUser | null>;
+  getUserWithPermissions: (userId: string) => Promise<AuthSessionUser | null>;
 };
 
 export function createRequireAuth({
@@ -46,13 +46,21 @@ export function createRequireAuth({
       return;
     }
 
-    const user = await getUserWithPermissions(payload.sub);
+    const sessionUser = await getUserWithPermissions(payload.sub);
 
-    if (!user) {
+    if (!sessionUser) {
       res.status(401).json({ message: "Kullanıcı aktif değil veya bulunamadı." });
       return;
     }
 
+    if ((payload.sv ?? 0) !== sessionUser.sessionVersion) {
+      res.status(401).json({
+        message: "Oturumunuz geçersiz kılındı. Lütfen tekrar giriş yapın.",
+      });
+      return;
+    }
+
+    const { sessionVersion: _sessionVersion, ...user } = sessionUser;
     req.user = user;
     next();
   };

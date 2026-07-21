@@ -50,7 +50,14 @@ describe("auth security", () => {
       sub: "user-1",
       exp: 1_783_937_700,
       loginIp: "10.0.0.8",
+      sv: 0,
     });
+  });
+
+  it("includes the supplied session version in new tokens", () => {
+    vi.stubEnv("AUTH_TOKEN_SECRET", "unit-test-secret");
+
+    expect(verifyToken(signToken("user-1", 480, undefined, 7))?.sv).toBe(7);
   });
 
   it("preserves the development token-secret fallback", () => {

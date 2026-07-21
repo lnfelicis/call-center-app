@@ -1,4 +1,8 @@
-export type HttpErrorBody = { message: string } | { code: string; message: string };
+export type HttpErrorBody = {
+  message: string;
+  code?: string;
+  field?: string;
+};
 
 export class HttpError extends Error {
   constructor(
